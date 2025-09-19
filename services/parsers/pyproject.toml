@@ -1,0 +1,12 @@
+[project]
+name = "parsers"
+version = "0.1.0"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "httpx",
+  "lasio",            # LAS parser
+  "numpy",
+  "matplotlib",
+  "obspy"             # SEG-Y reader + plotting
+]

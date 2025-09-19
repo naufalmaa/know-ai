@@ -1,0 +1,40 @@
+### Health
+GET http://127.0.0.1:4000/api/health
+
+### List children (root)
+GET http://127.0.0.1:4000/api/drive/children
+
+### Create folder
+POST http://127.0.0.1:4000/api/drive/folder
+Content-Type: application/json
+
+{
+  "name": "TestFolder",
+  "parent_id": null
+}
+
+### Presign upload
+POST http://127.0.0.1:4000/api/uploads/presign
+Content-Type: application/json
+
+{
+  "filename": "demo.pdf",
+  "mime_type": "application/pdf",
+  "folder_id": null
+}
+
+### Complete upload (contoh body; ganti id/size/checksum dari hasil presign & upload)
+POST http://127.0.0.1:4000/api/uploads/complete
+Content-Type: application/json
+
+{
+  "file_id": "REPLACE",
+  "size": 12345,
+  "checksum": "deadbeef"
+}
+
+### Files table (dashboard)
+GET http://127.0.0.1:4000/api/files
+
+### Quick search
+GET http://127.0.0.1:4000/api/drive/search?q=demo

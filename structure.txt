@@ -1,0 +1,87 @@
+## Phase 1 - Setup
+
+know-ai/
+├─ package.json
+├─ pnpm-lock.yaml
+├─ tsconfig.base.json
+├─ .env.example
+├─ litellm.yaml
+├─ apps/
+│  ├─ web/                         # Next.js + Tailwind + shadcn/ui (optional) + Chat UI
+│  │  ├─ package.json
+│  │  ├─ next.config.mjs
+│  │  ├─ postcss.config.mjs
+│  │  ├─ tailwind.config.ts
+│  │  ├─ app/
+│  │  │  ├─ globals.css
+│  │  │  ├─ layout.tsx
+│  │  │  ├─ page.tsx
+│  │  │  ├─ upload/page.tsx
+│  │  │  ├─ dashboard/page.tsx
+│  │  │  └─ assistant/page.tsx
+│  │  ├─ components/
+│  │  │  ├─ Uploader.tsx
+│  │  │  └─ ChatStream.tsx
+│  │  └─ lib/api.ts
+│  └─ api/                         # Fastify gateway: auth, presign, metadata CRUD
+│     ├─ package.json
+│     └─ src/
+│        ├─ server.ts
+│        ├─ db.ts
+│        ├─ routes/
+│        │  ├─ health.ts
+│        │  ├─ auth.ts
+│        │  ├─ folders.ts
+│        │  ├─ files.ts
+│        │  └─ metadata.ts
+│        └─ sql/
+│           └─ 000_init.sql
+└─ services/
+   ├─ ingest/                      # FastAPI: OCR→Markdown→Chunk→Embed→Weaviate
+   │  ├─ pyproject.toml
+   │  ├─ main.py
+   │  ├─ chunker.py
+   │  └─ weaviate_client.py
+   └─ chat/                        # Chat service (FastAPI WebSocket) → RAG via Weaviate + LiteLLM/Ollama
+      ├─ pyproject.toml
+      └─ app.py
+
+
+# Phase 2
+know-ai/
+├─ package.json
+├─ tsconfig.base.json
+├─ .env
+├─ litellm.yaml
+├─ apps/
+│  ├─ web/
+│  │  ├─ app/
+│  │  │  ├─ drive/page.tsx             ➕  (GDrive-like UI)
+│  │  │  ├─ assistant/page.tsx         (upgraded)
+│  │  │  └─ sections/
+│  │  │     ├─ page.tsx                ➕  (tabs wrapper)
+│  │  │     ├─ production/page.tsx     ➕
+│  │  │     ├─ operations/page.tsx     ➕
+│  │  │     └─ technical/page.tsx      ➕ (LAS/SEGY viewers)
+│  │  ├─ components/
+│  │  │  ├─ drive/
+│  │  │  │  ├─ Sidebar.tsx             ➕
+│  │  │  │  ├─ Toolbar.tsx             ➕
+│  │  │  │  ├─ Breadcrumbs.tsx         ➕
+│  │  │  │  ├─ FileGrid.tsx            ➕
+│  │  │  │  └─ NewFolderModal.tsx      ➕
+│  │  │  ├─ ChatStream.tsx             (upgraded UI)
+│  │  │  └─ Uploader.tsx               (handles folderId)
+│  │  └─ lib/api.ts
+│  └─ api/
+│     └─ src/
+│        ├─ routes/
+│        │  ├─ drive.ts                ➕ (children, breadcrumbs, CRUD, search)
+│        │  ├─ files.ts                (adds move/rename)
+│        │  └─ metadata.ts
+└─ services/
+   ├─ ingest/
+   │  ├─ main.py                       (xlsx support + optional Agno)
+   └─ parsers/                         ➕
+      ├─ pyproject.toml
+      └─ main.py                       (LAS+SEGY viewers API)

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ingest"
+version = "0.1.0"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "httpx",
+  "weaviate-client"
+]
+
+# <-- Ini kuncinya: deklarasikan modul top-level
+[tool.setuptools]
+py-modules = ["main", "chunker", "weaviate_client"]
+# Kalau memang ada file rag.py dan Anda ingin pakai, tambahkan juga:
+# py-modules = ["main", "chunker", "weaviate_client", "rag"]
+
+# services/ingest/pyproject.toml (add)
+dependencies = [
+  "fastapi","uvicorn[standard]","httpx",
+  "pandas","openpyxl",           # for xlsx→md helper
+  "psycopg[binary,pool]",        # Postgres
+]

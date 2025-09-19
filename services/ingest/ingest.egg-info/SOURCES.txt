@@ -1,0 +1,9 @@
+chunker.py
+main.py
+pyproject.toml
+weaviate_client.py
+ingest.egg-info/PKG-INFO
+ingest.egg-info/SOURCES.txt
+ingest.egg-info/dependency_links.txt
+ingest.egg-info/requires.txt
+ingest.egg-info/top_level.txt
