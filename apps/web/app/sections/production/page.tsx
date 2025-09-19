@@ -1,8 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import PlotCard from '@/components/PlotCard'
-
-const API = process.env.NEXT_PUBLIC_API_BASE!
+import { api } from '@/lib/api'
 
 export default function Production(){
   const [data,setData]=useState<any|null>(null)
@@ -12,7 +11,7 @@ export default function Production(){
   useEffect(()=>{
     const p=new URLSearchParams({ groupby })
     if(block) p.set('block', block)
-    fetch(`${API}/api/metrics/aceh/production?${p}`).then(r=>r.json()).then(setData)
+    fetch(api(`/api/metrics/aceh/production?${p}`)).then(r=>r.json()).then(setData)
   },[groupby,block])
 
   return (

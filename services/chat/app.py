@@ -1,6 +1,11 @@
 import os, json, asyncio, httpx, re
+from pathlib import Path
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from .pg_client import search_chunks
+
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 app = FastAPI()
 

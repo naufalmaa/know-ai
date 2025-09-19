@@ -1,12 +1,11 @@
 'use client'
 import { MapContainer, TileLayer, Polygon, CircleMarker, Popup } from 'react-leaflet'
 import { useEffect, useState } from 'react'
-
-const API = process.env.NEXT_PUBLIC_API_BASE!
+import { api } from '@/lib/api'
 
 export default function Operations(){
   const [data,setData]=useState<any|null>(null)
-  useEffect(()=>{ fetch(`${API}/api/metrics/map`).then(r=>r.json()).then(setData) },[])
+  useEffect(()=>{ fetch(api('/api/metrics/map')).then(r=>r.json()).then(setData) },[])
 
   return (
     <div>

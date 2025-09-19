@@ -39,7 +39,14 @@ export default function ChatStream(){
     setInput('')
   }
 
-  const lastResult = useMemo(()=>frames.find(f=>f.type==='result') as any,[frames])
+  const lastResult = useMemo(() => {
+    for (let i = frames.length - 1; i >= 0; i -= 1) {
+      if (frames[i].type === 'result') {
+        return frames[i] as Extract<Frame, { type: 'result' }>
+      }
+    }
+    return undefined
+  }, [frames])
 
   return (
     <div className="grid grid-cols-3 gap-6">

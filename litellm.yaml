@@ -4,7 +4,7 @@ model_list:
       model: ollama/deepseek-r1:14b
       api_base: ${OLLAMA_BASE}
       # api_key: ${LITELLM_API_KEY}
-  - model_name: mxbai-embed-large d2
+  - model_name: mxbai-embed-large:latest
     litellm_params:
       model: ollama/mxbai-embed-large:latest
       api_base: ${OLLAMA_BASE}

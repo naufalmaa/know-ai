@@ -1,4 +1,10 @@
 import os, psycopg
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 PG_URL = os.environ["POSTGRES_URL"]
 
 def get_conn(): return psycopg.connect(PG_URL)

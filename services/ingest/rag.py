@@ -1,4 +1,9 @@
 import os, httpx, weaviate, json
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 WEAVIATE_URL=os.environ["WEAVIATE_URL"]
 LITELLM_BASE=os.environ["LITELLM_BASE"]

@@ -1,8 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-
-const API = process.env.NEXT_PUBLIC_API_BASE // optional
-const base = API || ""
+import { api } from '@/lib/api'
 
 export default function NewFolderModal({ folderId, onCreated }:{ folderId?:string, onCreated:()=>void }){
   const [open,setOpen]=useState(false)
@@ -21,7 +19,7 @@ export default function NewFolderModal({ folderId, onCreated }:{ folderId?:strin
         <div className="mt-3 flex justify-end gap-2">
           <button className="px-3 py-1" onClick={()=>setOpen(false)}>Cancel</button>
           <button className="px-3 py-1 bg-blue-600 text-white rounded" onClick={async()=>{
-            await fetch(`${base}/api/drive/folder`,{method:'POST',headers:{'Content-Type':'application/json'},
+            await fetch(api('/api/drive/folder'),{method:'POST',headers:{'Content-Type':'application/json'},
               body:JSON.stringify({ name, parent_id: folderId||null })})
             setOpen(false); setName(''); onCreated()
           }}>Create</button>

@@ -1,9 +1,14 @@
 import os, httpx
+from pathlib import Path
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from .chunker import chunk_markdown
 from .pg_client import upsert_chunks
 import asyncio
+
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 app = FastAPI()
 
