@@ -13,7 +13,7 @@ pnpm -C apps/api i
 pnpm -C apps/web i
 
 # 4) Tailwind (Next.js 15)
-pnpm -C apps/web add -D @tailwindcss/postcss
+pnpm -C apps/web add -D @tailwindcss/poshttp://127.0.0.1:4000/api/uploads/presigntcss
 # Pastikan apps/web/postcss.config.mjs pakai @tailwindcss/postcss (bukan "tailwindcss" langsung)
 
 # 5) Hapus lockfile ganda kalau ada

@@ -1,1 +1,1 @@
-{ "name":"know-ai", "private":true, "workspaces":["apps/*"] }
+{ "name":"know-ai", "private":true, "workspaces":["apps/*"], "type": "module" }

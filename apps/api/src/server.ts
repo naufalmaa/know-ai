@@ -13,6 +13,7 @@ import { routes as drive } from './routes/drive'
 import { routes as importRoutes } from './routes/import'
 import { routes as metricsExample } from './routes/metrics_example'
 import { routes as metricsAceh } from './routes/metrics_aceh'
+import { routes as database } from './routes/database'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import * as path from 'node:path'
@@ -47,11 +48,12 @@ app.register(drive)
 app.register(importRoutes)
 app.register(metricsExample)
 app.register(metricsAceh)
+app.register(database)
 
 console.log('FASTIFY PORT=', process.env.FASTIFY_PORT)
 // console.log('[API] S3_ENDPOINT=', process.env.S3_ENDPOINT, 'S3_REGION=', process.env.S3_REGION)
 
-const port = Number(process.env.FASTIFY_PORT || 4001)
+const port = Number(process.env.FASTIFY_PORT || 4000)
 // paksa IPv4 agar curl 127.0.0.1 berhasil di Windows
 const host = process.env.HOST || '0.0.0.0'
 

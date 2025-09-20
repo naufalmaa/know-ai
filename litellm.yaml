@@ -2,17 +2,19 @@ model_list:
   - model_name: deepseek-r1:14b
     litellm_params:
       model: ollama/deepseek-r1:14b
-      api_base: ${OLLAMA_BASE}
+      api_base: http://117.54.250.177:5162
       # api_key: ${LITELLM_API_KEY}
   - model_name: mxbai-embed-large:latest
     litellm_params:
       model: ollama/mxbai-embed-large:latest
-      api_base: ${OLLAMA_BASE}
+      api_base: http://117.54.250.177:5162
       # api_key: ${LITELLM_API_KEY}
 
-# general_settings:
-#   master_key: ${LITELLM_API_KEY}
+general_settings:
+  master_key: sk-local
+  # Enable fallback to OpenAI if needed
+  fallback_models: ["openai/gpt-4o-mini"]
 
 server_settings:
   host: 0.0.0.0
-  port: 4000
+  port: 4001

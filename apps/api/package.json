@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts"
+    "dev": "tsx watch src/server.ts",
+    "test-db": "tsx src/test-db.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.669.0",
