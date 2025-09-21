@@ -7,3 +7,8 @@
 6. start agno (AI agents) -> uvicorn services.agno.main:app --port 9010 --reload --env-file .env
 7. start web -> pnpm -C apps/web i
                 pnpm -C apps/web dev    
+
+curl -L -X POST 'http://127.0.0.1:4001/key/generate' \
+-H 'Authorization: Bearer sk-1234' \
+-H 'Content-Type: application/json' \
+-d '{}'

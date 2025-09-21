@@ -4,8 +4,22 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import sys
 import os
+import httpx
+import json
+import re
+import asyncio
 sys.path.append(os.path.dirname(__file__))
 from pg_client import search_chunks
+from zara_verificator import get_verificator
+
+# Enhanced LiteLLM integration
+try:
+    from litellm import completion
+    LITELLM_AVAILABLE = True
+    print("✅ LiteLLM library available for streaming support")
+except ImportError:
+    LITELLM_AVAILABLE = False
+    print("⚠️  LiteLLM library not available, using HTTP API only")
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -16,10 +30,142 @@ LITELLM_BASE = os.environ["LITELLM_BASE"]
 LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "sk")
 EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "mxbai-embed-large:latest")
 GEN_MODEL = os.getenv("RAG_GENERATION_MODEL", "deepseek-r1:14b")
+OLLAMA_BASE = os.getenv("OLLAMA_BASE", "http://117.54.250.177:5162")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")   # optional fail-safe
 API_BASE = os.getenv("API_BASE", "http://127.0.0.1:4000")
-# Agno AI Agent Service
 AGNO_BASE = os.getenv("AGNO_BASE", "http://127.0.0.1:9010")
+# Initialize Zara Verificator
+verificator = get_verificator(LITELLM_BASE)
+
+# === Enhanced Streaming Functions for Thought Process ===
+
+async def stream_thought_stage(websocket: WebSocket, stage: str, message: str, status: str = "processing"):
+    """Stream individual thought process stages"""
+    await websocket.send_text(json.dumps({
+        "type": "agno_status",
+        "payload": message,
+        "stage": stage,
+        "status": status
+    }))
+
+async def handle_fast_response(websocket: WebSocket, intent: str, message: str):
+    """Handle fast responses for trivial queries"""
+    await stream_thought_stage(websocket, "fast_route", f"Quick response for {intent}", "complete")
+    
+    # Stream the fast response
+    await websocket.send_text(json.dumps({"type": "stream_start", "payload": {}}))
+    
+    # Simulate natural typing speed for fast responses
+    for i, char in enumerate(message):
+        await websocket.send_text(json.dumps({
+            "type": "stream_chunk",
+            "payload": char
+        }))
+        if i % 3 == 0:  # Add slight delay every 3 characters
+            await asyncio.sleep(0.02)
+    
+    await websocket.send_text(json.dumps({"type": "stream_end", "payload": {}}))
+
+# === Enhanced LiteLLM Streaming Functions ===
+
+async def llm_generate_stream(prompt: str, websocket: WebSocket = None):
+    """Generate streaming response using LiteLLM with Ollama backend"""
+    if LITELLM_AVAILABLE:
+        try:
+            # Use direct LiteLLM library for streaming (preferred method)
+            response = completion(
+                model=f"ollama_chat/{GEN_MODEL}",
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+                api_base=OLLAMA_BASE
+            )
+            
+            full_response = ""
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    if websocket:
+                        await websocket.send_text(json.dumps({
+                            "type": "stream_chunk",
+                            "payload": content
+                        }))
+            
+            return full_response
+            
+        except Exception as e:
+            print(f"LiteLLM streaming failed: {e}, falling back to HTTP API")
+    
+    # Fallback to HTTP API streaming
+    try:
+        async with httpx.AsyncClient(timeout=120) as cli:
+            async with cli.stream(
+                "POST",
+                f"{LITELLM_BASE}/chat/completions",
+                headers={"Authorization": f"Bearer {LITELLM_API_KEY}"},
+                json={
+                    "model": GEN_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": True
+                }
+            ) as response:
+                response.raise_for_status()
+                
+                full_response = ""
+                async for line in response.aiter_lines():
+                    if line.startswith("data: ") and not line.endswith("[DONE]"):
+                        try:
+                            chunk_data = json.loads(line[6:])
+                            content = chunk_data["choices"][0]["delta"].get("content", "")
+                            if content:
+                                full_response += content
+                                if websocket:
+                                    await websocket.send_text(json.dumps({
+                                        "type": "stream_chunk",
+                                        "payload": content
+                                    }))
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+                
+                return full_response
+                
+    except Exception as e:
+        print(f"HTTP streaming failed: {e}, falling back to non-streaming")
+        # Final fallback to non-streaming
+        return await llm_generate(prompt)
+
+async def llm_generate(prompt: str) -> str:
+    """Generate non-streaming response using LiteLLM"""
+    if LITELLM_AVAILABLE:
+        try:
+            response = completion(
+                model=f"ollama_chat/{GEN_MODEL}",
+                messages=[{"role": "user", "content": prompt}],
+                stream=False,
+                api_base=OLLAMA_BASE
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"LiteLLM generation failed: {e}, falling back to HTTP API")
+    
+    # Fallback to HTTP API
+    try:
+        async with httpx.AsyncClient(timeout=120) as cli:
+            r = await cli.post(f"{LITELLM_BASE}/chat/completions",
+                headers={"Authorization": f"Bearer {LITELLM_API_KEY}"},
+                json={"model": GEN_MODEL, "messages":[{"role":"user","content": prompt}]})
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+    except Exception:
+        if not OPENAI_API_KEY: 
+            raise
+        # Final fallback to OpenAI
+        async with httpx.AsyncClient(timeout=120) as cli:
+            r = await cli.post("https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                json={"model":"gpt-5-nano","messages":[{"role":"user","content": prompt}]})
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
 
 # ---------- Agno AI Agent Integration ----------
 async def agno_enhance_prompt(original_query: str, context: str = "") -> tuple[str, dict]:
@@ -125,22 +271,7 @@ Collections:
 
 Note: Database connection unavailable - using fallback data"""
 
-async def llm_generate(prompt:str)->str:
-  try:
-    async with httpx.AsyncClient(timeout=120) as cli:
-      r = await cli.post(f"{LITELLM_BASE}/chat/completions",
-        headers={"Authorization": f"Bearer {LITELLM_API_KEY}"},
-        json={"model": GEN_MODEL, "messages":[{"role":"user","content": prompt}]})
-      r.raise_for_status()
-      return r.json()["choices"][0]["message"]["content"]
-  except Exception:
-    if not OPENAI_API_KEY: raise
-    async with httpx.AsyncClient(timeout=120) as cli:
-      r = await cli.post("https://api.openai.com/v1/chat/completions",
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
-        json={"model":"gpt-5-nano","messages":[{"role":"user","content": prompt}]})
-      r.raise_for_status()
-      return r.json()["choices"][0]["message"]["content"]
+
 
 # ---------- Planner ----------
 VIZ_SYSTEM = """You plan responses for a UI that supports TEXT, TABLE, VIZ, or TOOL calls.
@@ -282,7 +413,7 @@ async def execute_tool(plan_obj:dict):
   return {"type":"text","text":"Tool not recognized."}
 
 
-# ---------- Enhanced WebSocket with Agno Integration ----------
+# ---------- Enhanced WebSocket with Zara Smart Routing ----------
 @app.websocket("/ws")
 async def ws(ws: WebSocket):
   await ws.accept()
@@ -295,99 +426,118 @@ async def ws(ws: WebSocket):
       tenant = msg.get("tenant_id", "demo")
       fid = msg.get("file_id")
 
-      # 🤖 STEP 1: Agno Prompt Enhancement with Database Context
-      await ws.send_text(json.dumps({"type":"agno_status", "payload":"Enhancing your query with AI and database context...", "stage":"prompt_enhancement"}))
+      # 🧠 STEP 0: Smart Routing and Verification
+      await stream_thought_stage(ws, "verification", "Analyzing your question...", "processing")
       
-      # Get current database context
-      db_context = await get_database_context()
-      enhanced_context = f"User is querying a document management system. {db_context}"
+      route_decision = await verificator.verify_and_route(original_query)
       
-      enhanced_query, prompt_metadata = await agno_enhance_prompt(original_query, enhanced_context)
+      await stream_thought_stage(ws, "verification", 
+                                f"Intent: {route_decision.intent} (confidence: {route_decision.confidence:.1%})", 
+                                "complete")
       
-      if prompt_metadata["agno_enhanced"]:
-        await ws.send_text(json.dumps({
-          "type":"agno_enhancement", 
-          "payload":{
-            "original": original_query,
-            "enhanced": enhanced_query,
-            "confidence": prompt_metadata["confidence"],
-            "reasoning": prompt_metadata["reasoning"][:200] + "..." if len(prompt_metadata["reasoning"]) > 200 else prompt_metadata["reasoning"]
-          }
-        }))
-      
-      # Use enhanced query for retrieval
-      query_for_search = enhanced_query
+      # Handle fast responses for trivial queries
+      if not route_decision.needs_retrieval and not route_decision.needs_improvement:
+        fast_response = verificator.get_fast_response(route_decision.intent)
+        await handle_fast_response(ws, route_decision.intent, fast_response)
+        continue
 
-      # 🔍 STEP 2: Document Retrieval (existing logic)
-      await ws.send_text(json.dumps({"type":"agno_status", "payload":"Searching relevant documents...", "stage":"retrieval"}))
-      
-      q_emb = await embed(query_for_search)
-      hits = search_chunks(tenant, q_emb, 8, fid)
-      await ws.send_text(json.dumps({"type":"result","payload":{"objects":[
-        {"text":h["text"], "meta":{"file_id":str(h["file_id"]),"page":h["page"],"section":h["section"]}}
-      for h in hits]}}))
+      # 🤖 STEP 1: Agno Prompt Enhancement (only if needed)
+      enhanced_query = original_query
+      if route_decision.needs_improvement:
+        await stream_thought_stage(ws, "prompt_enhancement", "Enhancing your question with AI...", "processing")
+        
+        # Get current database context
+        db_context = await get_database_context()
+        enhanced_context = f"User is querying Zara AI Knowledge Navigator. {db_context}"
+        
+        enhanced_query, prompt_metadata = await agno_enhance_prompt(original_query, enhanced_context)
+        
+        if prompt_metadata["agno_enhanced"]:
+          await stream_thought_stage(ws, "prompt_enhancement", 
+                                    f"Enhanced query (confidence: {prompt_metadata['confidence']:.1%})", 
+                                    "complete")
+        else:
+          await stream_thought_stage(ws, "prompt_enhancement", "Using original query", "complete")
 
-      # 📊 STEP 3: Response Planning (existing logic)
-      await ws.send_text(json.dumps({"type":"agno_status", "payload":"Planning optimal response format...", "stage":"planning"}))
-      
-      p = await plan(query_for_search, hits)
-      
-      initial_response = ""
-      response_type = "text"
+      # 🔍 STEP 2: Document Retrieval (only if needed)
+      hits = []
+      if route_decision.needs_retrieval:
+        await stream_thought_stage(ws, "retrieval", "Searching your documents...", "processing")
+        
+        q_emb = await embed(enhanced_query)
+        hits = search_chunks(tenant, q_emb, 8, fid)
+        
+        await ws.send_text(json.dumps({"type":"result","payload":{"objects":[
+          {"text":h["text"], "meta":{"file_id":str(h["file_id"]),"page":h["page"],"section":h["section"]}}
+        for h in hits]}}))
+        
+        await stream_thought_stage(ws, "retrieval", 
+                                  f"Found {len(hits)} relevant document sections", 
+                                  "complete")
 
+      # 📊 STEP 3: Response Planning
+      await stream_thought_stage(ws, "planning", "Planning the best response format...", "processing")
+      
+      p = await plan(enhanced_query, hits)
+      
+      await stream_thought_stage(ws, "planning", 
+                                f"Response type: {p.get('type', 'text')}", 
+                                "complete")
+      
+      # 🚀 STEP 4: Generate Response
       if p.get("type") == "tool":
-        await ws.send_text(json.dumps({"type":"agno_status", "payload":"Executing data analysis tools...", "stage":"tool_execution"}))
+        await stream_thought_stage(ws, "tool_execution", "Running data analysis...", "processing")
         out = await execute_tool(p)
         
         if out.get("type") == "viz":
           await ws.send_text(json.dumps({"type":"viz","payload":out}))
-          initial_response = f"Generated visualization: {out.get('title', 'Data Chart')}"
-          response_type = "viz"
+          await stream_thought_stage(ws, "tool_execution", "Visualization created", "complete")
         elif out.get("type") == "table":
           await ws.send_text(json.dumps({"type":"table","payload":out}))
-          initial_response = f"Generated data table with {len(out.get('rows', []))} rows"
-          response_type = "table"
+          await stream_thought_stage(ws, "tool_execution", "Data table generated", "complete")
         else:
-          initial_response = out.get("text", "Tool execution completed")
-          await ws.send_text(json.dumps({"type":"answer","payload":initial_response}))
+          await stream_thought_stage(ws, "generation", "Generating response...", "processing")
+          await ws.send_text(json.dumps({"type": "stream_start", "payload": {}}))
+          
+          response_text = out.get("text", "Analysis completed.")
+          for char in response_text:
+            await ws.send_text(json.dumps({"type": "stream_chunk", "payload": char}))
+            await asyncio.sleep(0.01)
+          
+          await ws.send_text(json.dumps({"type": "stream_end", "payload": {}}))
+          await stream_thought_stage(ws, "generation", "Response complete", "complete")
           
       elif p.get("type") == "viz":
         await ws.send_text(json.dumps({"type":"viz","payload":p}))
-        initial_response = f"Generated visualization: {p.get('title', 'Data Chart')}"
-        response_type = "viz"
+        await stream_thought_stage(ws, "generation", "Visualization ready", "complete")
       elif p.get("type") == "table":
         await ws.send_text(json.dumps({"type":"table","payload":p}))
-        initial_response = f"Generated data table"
-        response_type = "table"
+        await stream_thought_stage(ws, "generation", "Table ready", "complete")
       else:
-        # Generate text response
-        await ws.send_text(json.dumps({"type":"agno_status", "payload":"Generating contextual answer...", "stage":"generation"}))
-        initial_response = await llm_generate(build_prompt(query_for_search, hits, db_context))
-        await ws.send_text(json.dumps({"type":"answer","payload":initial_response}))
-
-      # 🎯 STEP 4: Agno Response Evaluation & Enhancement
-      if initial_response and response_type == "text":
-        await ws.send_text(json.dumps({"type":"agno_status", "payload":"Optimizing response quality...", "stage":"response_evaluation"}))
+        # Generate streaming text response
+        await stream_thought_stage(ws, "generation", "Crafting your answer...", "processing")
         
-        enhanced_response, response_metadata = await agno_evaluate_response(initial_response, original_query)
+        # Start streaming response
+        await ws.send_text(json.dumps({"type": "stream_start", "payload": {}}))
         
-        if response_metadata["agno_evaluated"] and enhanced_response != initial_response:
-          # Send the enhanced response
-          await ws.send_text(json.dumps({"type":"answer_enhanced","payload":enhanced_response}))
+        response_text = await llm_generate_stream(
+          build_prompt(enhanced_query, hits, await get_database_context()), 
+          websocket=ws
+        )
+        
+        await ws.send_text(json.dumps({"type": "stream_end", "payload": {}}))
+        await stream_thought_stage(ws, "generation", "Response complete", "complete")
+        
+        # 🎯 STEP 5: Response Enhancement (only for complex queries)
+        if route_decision.needs_improvement and response_text:
+          await stream_thought_stage(ws, "enhancement", "Optimizing response quality...", "processing")
           
-          # Send evaluation insights
-          await ws.send_text(json.dumps({
-            "type":"agno_evaluation",
-            "payload":{
-              "improvements_made": True,
-              "confidence": response_metadata["confidence"],
-              "reasoning": response_metadata["reasoning"][:200] + "..." if len(response_metadata["reasoning"]) > 200 else response_metadata["reasoning"],
-              "suggestions": response_metadata["suggestions"][:3]  # Show top 3 suggestions
-            }
-          }))
-      
-      # Final status
-      await ws.send_text(json.dumps({"type":"agno_status", "payload":"Response complete!", "stage":"complete"}))
+          enhanced_response, response_metadata = await agno_evaluate_response(response_text, original_query)
+          
+          if response_metadata["agno_evaluated"] and enhanced_response != response_text:
+            await stream_thought_stage(ws, "enhancement", "Response enhanced", "complete")
+          else:
+            await stream_thought_stage(ws, "enhancement", "Response quality verified", "complete")
       
   except WebSocketDisconnect:
     hb.cancel()

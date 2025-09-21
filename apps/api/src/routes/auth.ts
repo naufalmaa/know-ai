@@ -5,7 +5,7 @@ export async function routes(app: FastifyInstance) {
   app.post('/api/auth/register', async (req, rep) => {
     const { email, password } = req.body as any
     const r = await db.query(
-      'insert into users(email,password_hash,role) values($1,$2,$3) returning id,email,role',
+      'insert into users(email,password_hash,role) values($1,$2,$3) returning id,email,role',z
       [email, password, 'user']
     )
     rep.setCookie('token', r.rows[0].id, { httpOnly: true, sameSite: 'lax' })

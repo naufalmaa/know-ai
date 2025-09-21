@@ -13,7 +13,9 @@ model_list:
 general_settings:
   master_key: sk-local
   # Enable fallback to OpenAI if needed
-  fallback_models: ["openai/gpt-4o-mini"]
+  fallback_models: ["openai/gpt-5-nano"]
+    # allow requests even if DB is unavailable
+  allow_requests_on_db_unavailable: true  
 
 server_settings:
   host: 0.0.0.0
