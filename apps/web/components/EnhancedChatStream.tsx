@@ -68,7 +68,7 @@ type Frame =
   | { type: 'stream_end', payload: {} }
 
 export default function EnhancedChatStream() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+//   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [conversations, setConversations] = useState<ConversationSession[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string>('')
   const [input, setInput] = useState('')
@@ -85,6 +85,14 @@ export default function EnhancedChatStream() {
   const params = useSearchParams()
   const fileId = params.get('file_id') || undefined
 
+  // Di dalam komponen, tambahkan sebuah Ref untuk melacak ID pesan aktif
+  const activeMessageIdRef = useRef<string | null>(null);
+
+  const currentMessages = useMemo(() => {
+    if (!currentConversationId) return []
+    return conversations.find(c => c.id === currentConversationId)?.messages || []
+    }, [conversations, currentConversationId])
+
   // Auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -92,7 +100,7 @@ export default function EnhancedChatStream() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, currentStreamingMessage])
+  }, [currentMessages, currentStreamingMessage])
 
   // WebSocket connection
   useEffect(() => {
@@ -121,28 +129,31 @@ export default function EnhancedChatStream() {
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data)
       if (msg.type === 'heartbeat') return
+
+        setConversations(prevConvs => {
+        // Cari percakapan yang sedang aktif
+        const newConvs = prevConvs.map(conv => {
+          if (conv.id !== currentConversationId) return conv;
+
+          let newMessages = [...conv.messages];
+          const activeMessageId = activeMessageIdRef.current;
+
+          // Temukan pesan AI yang sedang di-stream
+          let streamingMessage = activeMessageId ? newMessages.find(m => m.id === activeMessageId) : null;
       
       switch (msg.type) {
-        case 'agno_status':
-          const stage: ThoughtStage = {
-            stage: msg.stage || 'processing',
-            status: msg.status || 'processing',
-            message: msg.payload,
-            timestamp: Date.now()
-          }
-          
-          // Update thought process for the current message
-          setCurrentThoughtProcess(prev => {
-            const newStages = [...prev]
-            const existingIndex = newStages.findIndex(s => s.stage === stage.stage)
-            if (existingIndex >= 0) {
-              newStages[existingIndex] = stage
-            } else {
-              newStages.push(stage)
+                    case 'agno_status': {
+              if (streamingMessage && streamingMessage.thoughtProcess) {
+                const stage: ThoughtStage = {
+                  stage: msg.stage || 'processing',
+                  status: msg.status || 'processing',
+                  message: msg.payload,
+                  timestamp: Date.now()
+                };
+                streamingMessage.thoughtProcess.push(stage);
+              }
+              break;
             }
-            return newStages
-          })
-          break
           
         case 'result':
           if (currentMessage) {
@@ -150,66 +161,35 @@ export default function EnhancedChatStream() {
           }
           break
           
-        case 'stream_start':
-          setIsStreaming(true)
-          setCurrentStreamingMessage('')
-          setCurrentThoughtProcess([])
+            case 'stream_start': {
+              const newAssistantMessage: ChatMessage = {
+                id: crypto.randomUUID(),
+                type: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+                streaming: true,
+                isComplete: false,
+                thoughtProcess: [] // Siapkan untuk thought process
+              };
+              activeMessageIdRef.current = newAssistantMessage.id;
+              newMessages.push(newAssistantMessage);
+              break;
+            }
           
-          // Initialize assistant message
-          currentMessageId = Date.now().toString()
-          setActiveMessageId(currentMessageId)
-          currentMessage = {
-            id: currentMessageId,
-            type: 'assistant',
-            content: '',
-            timestamp: Date.now(),
-            streaming: true,
-            thoughtProcess: [],
-            chunks: [],
-            visualizations: [],
-            tables: [],
-            isComplete: false
-          }
-          thoughtStages = []
-          break
-          
-        case 'stream_chunk':
-          setCurrentStreamingMessage(prev => prev + msg.payload)
-          break
-          
-        case 'stream_end':
-          setIsStreaming(false)
-          if (currentMessage && currentMessageId) {
-            // Get the final streamed content
-            setCurrentStreamingMessage(finalMessage => {
-              currentMessage.content = finalMessage
-              currentMessage.streaming = false
-              currentMessage.thoughtProcess = [...currentThoughtProcess]
-              currentMessage.isComplete = true
-              
-              // Add completed message to the list
-              setMessages(prev => {
-                const newMessages = [...prev, currentMessage as ChatMessage]
-                // Update conversation with new messages
-                setConversations(convs => 
-                  convs.map(conv => 
-                    conv.id === currentConversationId 
-                      ? { ...conv, messages: newMessages }
-                      : conv
-                  )
-                )
-                return newMessages
-              })
-              
-              // Reset streaming states
-              setCurrentThoughtProcess([])
-              setProcessingStage('')
-              setActiveMessageId('')
-              return '' // Clear streaming message
-            })
-          }
-          currentMessageId = ''
-          break
+            case 'stream_chunk': {
+              if (streamingMessage) {
+                streamingMessage.content += msg.payload;
+              }
+              break;
+            }
+        case 'stream_end': {
+              if (streamingMessage) {
+                streamingMessage.streaming = false;
+                streamingMessage.isComplete = true;
+              }
+              activeMessageIdRef.current = null; // Reset pelacak
+              break;
+            }
           
         case 'viz':
           if (currentMessage) {
@@ -226,31 +206,44 @@ export default function EnhancedChatStream() {
           break
           
         case 'answer':
-        case 'answer_enhanced':
+        case 'answer_enhanced': {
           // Handle non-streaming responses
-          if (!currentMessageId) {
-            currentMessageId = Date.now().toString()
-            currentMessage = {
-              id: currentMessageId,
+          if (!isStreaming) { // Cek jika tidak sedang dalam proses streaming
+            const newMessage: ChatMessage = {
+              id: crypto.randomUUID(), // Gunakan UUID
               type: 'assistant',
               content: msg.payload,
               timestamp: Date.now(),
               streaming: false,
               thoughtProcess: [...currentThoughtProcess],
-              chunks: [],
-              visualizations: [],
-              tables: [],
+              chunks: currentMessage?.chunks || [],
+              visualizations: currentMessage?.visualizations || [],
+              tables: currentMessage?.tables || [],
               isComplete: true
-            }
-            setMessages(prev => [...prev, currentMessage as ChatMessage])
+            };
+            
+            // Langsung update state conversations
+            setConversations(prevConvs =>
+              prevConvs.map(conv =>
+                conv.id === currentConversationId
+                  ? { ...conv, messages: [...conv.messages, newMessage] }
+                  : conv
+              )
+            );
+            
             setCurrentThoughtProcess([])
             setProcessingStage('')
             setActiveMessageId('')
             currentMessageId = ''
           }
           break
+        }
       }
-    }
+      return { ...conv, messages: newMessages };
+    });
+        return newConvs;
+      });
+      };
     
     wsRef.current = ws
     return () => {
@@ -261,63 +254,55 @@ export default function EnhancedChatStream() {
 
   const sendMessage = () => {
     if (!wsConnected || !wsRef.current || !input.trim()) {
-      return
+      return;
     }
-    
-    // Create new conversation if needed
-    if (!currentConversationId) {
-      const newConvId = Date.now().toString()
-      setCurrentConversationId(newConvId)
-      const newConversation: ConversationSession = {
-        id: newConvId,
-        title: input.trim().substring(0, 50) + (input.length > 50 ? '...' : ''),
-        timestamp: Date.now(),
-        messages: []
-      }
-      setConversations(prev => [newConversation, ...prev])
-    }
-    
-    // Clear any previous streaming states for clean start
-    setCurrentStreamingMessage('')
-    setCurrentThoughtProcess([])
-    setIsStreaming(false)
-    setProcessingStage('')
-    setActiveMessageId('')
-    
-    // Add user message to chat
+
     const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       type: 'user',
       content: input.trim(),
       timestamp: Date.now(),
       isComplete: true
-    }
-    setMessages(prev => {
-      const newMessages = [...prev, userMessage]
-      // Update conversation with new message
-      setConversations(convs => 
-        convs.map(conv => 
-          conv.id === currentConversationId 
-            ? { ...conv, messages: newMessages }
+    };
+
+    // Jika ini adalah percakapan baru
+    if (!currentConversationId) {
+      const newConvId = crypto.randomUUID(); // Gunakan UUID untuk ID unik
+      const newConversation: ConversationSession = {
+        id: newConvId,
+        title: input.trim().substring(0, 50) + (input.length > 50 ? '...' : ''),
+        timestamp: Date.now(),
+        messages: [userMessage] // Langsung masukkan pesan pertama
+      };
+      
+      // Update state conversations dan set ID percakapan saat ini
+      setConversations(prevConvs => [newConversation, ...prevConvs]);
+      setCurrentConversationId(newConvId);
+
+    // Jika percakapan sudah ada
+    } else {
+      setConversations(prevConvs =>
+        prevConvs.map(conv =>
+          conv.id === currentConversationId
+            ? { ...conv, messages: [...conv.messages, userMessage] }
             : conv
         )
-      )
-      return newMessages
-    })
-    
-    // Send to server
+      );
+    }
+
+    // Kirim ke server (ini tetap sama)
     wsRef.current.send(JSON.stringify({
       user_id: 'demo',
       conversation_id: currentConversationId || 'conv-1',
       query: input.trim(),
       file_id: fileId
-    }))
-    
-    setInput('')
-  }
+    }));
+
+    setInput('');
+  };
 
   const startNewChat = () => {
-    setMessages([])
+    // setMessages([])
     setCurrentConversationId('')
     setCurrentThoughtProcess([])
     setProcessingStage('')
@@ -327,11 +312,12 @@ export default function EnhancedChatStream() {
   }
 
   const loadConversation = (conversationId: string) => {
-    const conversation = conversations.find(c => c.id === conversationId)
-    if (conversation) {
-      setMessages(conversation.messages)
-      setCurrentConversationId(conversationId)
-    }
+    setCurrentConversationId(conversationId)
+    // const conversation = conversations.find(c => c.id === conversationId)
+    // if (conversation) {
+    //   setMessages(conversation.messages)
+    //   setCurrentConversationId(conversationId)
+    // }
   }
 
   const toggleThoughtProcess = (messageId: string) => {
@@ -398,7 +384,7 @@ export default function EnhancedChatStream() {
   const renderMessage = (message: ChatMessage, index: number) => {
     if (message.type === 'user') {
       // Check if this is the most recent user message and show live thought process
-      const isLastUserMessage = index === messages.length - 1 && isStreaming
+      const isLastUserMessage = index === currentMessages.length - 1 && isStreaming
       
       return (
         <div className="flex justify-end mb-4">
@@ -444,14 +430,37 @@ export default function EnhancedChatStream() {
           {/* Assistant Avatar */}
           <div className="flex items-start space-x-3">
             <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-              AI
+              ZA
             </div>
             <div className="flex-1">
+            {/* Thought Process (ditampilkan jika ada) */}
+              {message.thoughtProcess && message.thoughtProcess.length > 0 && (
+                <details className="mb-2 border border-gray-200 rounded-lg bg-gray-50/50">
+                  <summary className="p-3 text-sm font-medium text-gray-700 cursor-pointer list-none flex items-center justify-between hover:bg-gray-100/50 transition-colors">
+                    <div className="flex items-center space-x-2">
+                      {message.isComplete ? '✅' : '⏳'}
+                      <span>
+                        {message.isComplete ? 'Lihat Proses Berpikir' : 'Sedang Berpikir...'}
+                      </span>
+                    </div>
+                    <ChevronDownIcon className="w-4 h-4 text-gray-500" />
+                  </summary>
+                  <div className="border-t border-gray-200 p-3 space-y-2">
+                    {message.thoughtProcess.map((stage, idx) => (
+                      <div key={idx} className="flex items-center space-x-2 text-xs text-gray-600">
+                        <span className={stage.status === 'complete' ? 'text-green-500' : 'text-blue-500'}>●</span>
+                        <span>{stage.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
               {/* Main Response */}
-              {message.content && (
+              {(message.content || message.streaming) && (
                 <div className="bg-gray-100 rounded-2xl px-4 py-3 mb-2">
                   <div className="whitespace-pre-wrap text-gray-800">
                     {message.content}
+                    {message.streaming && <span className="animate-pulse">▋</span>}
                   </div>
                   
                   {/* Source Citations */}
@@ -502,9 +511,9 @@ export default function EnhancedChatStream() {
   }
 
   const lastResult = useMemo(() => {
-    const lastMessage = messages[messages.length - 1]
+    const lastMessage = currentMessages[currentMessages.length - 1]
     return lastMessage?.chunks || []
-  }, [messages])
+  }, [currentMessages])
 
   return (
     <div className="h-screen flex bg-gray-50">
@@ -608,7 +617,7 @@ export default function EnhancedChatStream() {
       <div className="flex-1 flex flex-col">
         {/* Chat Messages */}
         <div className="flex-1 overflow-auto p-6">
-          {messages.length === 0 ? (
+          {currentMessages.length === 0 && isStreaming ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
                 <div className="text-6xl mb-4">💬</div>
@@ -623,7 +632,7 @@ export default function EnhancedChatStream() {
             </div>
           ) : (
             <div className="space-y-4">
-              {messages.map((message, index) => (
+              {currentMessages.map((message, index) => (
                 <div key={message.id}>{renderMessage(message, index)}</div>
               ))}
               

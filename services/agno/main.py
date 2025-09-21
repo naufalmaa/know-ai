@@ -61,7 +61,7 @@ async def call_llm(prompt: str, max_retries: int = 2) -> str:
                         "model": GENERATION_MODEL,
                         "messages": [{"role": "user", "content": prompt}],
                         "temperature": 0.7,
-                        "max_tokens": 2000
+                        "max_tokens": 4000
                     }
                 )
                 
