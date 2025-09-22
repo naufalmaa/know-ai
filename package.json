@@ -1,1 +1,1 @@
-{ "name":"know-ai", "private":true, "workspaces":["apps/*"], "type": "module" }
+{"name":"know-ai","private":true,"workspaces":["apps/*"],"type":"module","dependencies":{"ws":"^8.18.3"}}

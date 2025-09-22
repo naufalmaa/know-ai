@@ -11,10 +11,16 @@ const nextConfig = {
   async rewrites() {
     // Use FASTIFY_PORT from environment, with proper fallback to 4000
     const fastifyPort = process.env.FASTIFY_PORT || "4000"
+    const streamlitPort = process.env.STREAMLIT_PORT || "8501"
     console.log('[Next.js] API rewrites pointing to port:', fastifyPort)
+    console.log('[Next.js] Streamlit assistant pointing to port:', streamlitPort)
     console.log('[Next.js] WebSocket URL:', process.env.NEXT_PUBLIC_CHAT_WS || 'ws://127.0.0.1:8000/ws')
 
     return [
+      // Proxy /assistant to Streamlit app
+      { source: "/assistant/:path*", destination: `http://127.0.0.1:${streamlitPort}/:path*` },
+      { source: "/assistant", destination: `http://127.0.0.1:${streamlitPort}/` },
+      // Keep existing API proxy
       { source: "/api/:path*", destination: `http://127.0.0.1:${fastifyPort}/api/:path*` }
     ]
   }

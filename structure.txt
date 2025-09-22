@@ -85,3 +85,11 @@ know-ai/
    └─ parsers/                         ➕
       ├─ pyproject.toml
       └─ main.py                       (LAS+SEGY viewers API)
+
+
+kartu pintar
+free lta - free ri days: yes no 
+tambahan recordable non recordable
+tombol save all dan save nya persession (ganti tab ga hilang data, ganti halaman hilang data)
+penggantian temuan -> object inspection
+tambahan halaman report 

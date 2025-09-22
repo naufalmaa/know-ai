@@ -48,3 +48,8 @@ node_modules
 *.log
 
 /research
+/older_version
+/setup-test
+/logs
+/pids
+/readme_old

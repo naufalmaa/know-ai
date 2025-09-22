@@ -83,10 +83,10 @@ async def call_llm(prompt: str, max_retries: int = 2) -> str:
                             "https://api.openai.com/v1/chat/completions",
                             headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
                             json={
-                                "model": "gpt-4o-mini",
+                                "model": "gpt-5-nano",
                                 "messages": [{"role": "user", "content": prompt}],
-                                "temperature": 0.7,
-                                "max_tokens": 2000
+                                # "temperature": 0.7,
+                                # "max_tokens": 2000
                             }
                         )
                         
@@ -111,7 +111,7 @@ async def root():
         "agents": ["prompt_restructurer", "response_evaluator"],
         "models": {
             "primary": GENERATION_MODEL,
-            "fallback": "openai/gpt-4o-mini" if OPENAI_API_KEY else "none"
+            "fallback": "openai/gpt-5-nano" if OPENAI_API_KEY else "none"
         }
     }
 
@@ -261,9 +261,67 @@ Provide your evaluation in the following JSON format:
             suggestions=["Try simplifying the evaluation criteria", "Check network connectivity"]
         )
 
+@app.post("/agent/simple-response")
+async def simple_response(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Simple, fast response without heavy processing for query/visualization modes"""
+    
+    user_query = request.get("query", "")
+    mode = request.get("mode", "query")
+    context = request.get("context", "")
+    sources = request.get("sources", [])  # List of source files
+    
+    try:
+        # Create a simple prompt based on mode
+        if mode == "visualization":
+            simple_prompt = f"""User asks: {user_query}
+
+Provide a concise response focused on data visualization. If they want charts or graphs, explain what type would be appropriate and why. Be direct and helpful.
+
+Context: {context}
+Available sources: {', '.join([s.get('file_id', 'unknown') for s in sources])}
+
+Response:"""
+        elif mode == "normal":
+            simple_prompt = f"""User asks: {user_query}
+
+Provide a direct, comprehensive answer using the database context. Focus on facts and detailed information from the sources. Be thorough but clear. This is normal mode - no AI enhancement needed, just solid information.
+
+Context: {context}
+Available sources: {', '.join([s.get('file_id', 'unknown') for s in sources])}
+
+Response:"""
+        else:  # query mode
+            simple_prompt = f"""User asks: {user_query}
+
+Provide a direct, structured answer. Focus on facts and clear information. Be concise but complete.
+
+Context: {context}
+Available sources: {', '.join([s.get('file_id', 'unknown') for s in sources])}
+
+Response:"""
+        
+        # Generate simple response
+        response = await call_llm(simple_prompt)
+        
+        return {
+            "success": True,
+            "response": response,
+            "mode": mode,
+            "sources_used": [s.get('file_id', 'unknown') for s in sources],
+            "processing_time": "fast",
+            "enhancement_level": "minimal"
+        }
+        
+    except Exception as e:
+        logger.error(f"Simple response failed: {e}")
+        return {
+            "success": False,
+            "response": f"I understand you're asking about: {user_query}. However, I'm having trouble processing this right now. Please try again or rephrase your question.",
+            "mode": mode,
+            "error": str(e)
+        }
 @app.post("/agent/multi-agent-process")
 async def multi_agent_process(request: Dict[str, Any]):
-    """Multi-agent processing pipeline: Restructure -> Process -> Evaluate"""
     
     original_prompt = request.get("prompt", "")
     context = request.get("context", "")

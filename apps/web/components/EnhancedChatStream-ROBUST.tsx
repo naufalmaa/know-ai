@@ -129,7 +129,6 @@ export default function EnhancedChatStream() {
         type: msg.type,
         payload: typeof msg.payload === 'string' ? msg.payload.substring(0, 100) + '...' : msg.payload,
         stage: msg.stage,
-        status: msg.status,
         conversationId: currentConversationId,
         bubbleState: currentBubbleState
       })
@@ -148,63 +147,42 @@ export default function EnhancedChatStream() {
               case 'agno_status': {
                 debugLog('🧠 Processing agno_status', { stage: msg.stage, payload: msg.payload })
                 
-                // Handle ALL stages that should transition from loading to thinking
-                if (['received', 'classify', 'verification', 'generate', 'retrieve', 'enhance', 'evaluate', 'format', 'deliver'].includes(msg.stage)) {
-                  // Remove loading bubble if exists
-                  if (currentBubbleState.loading) {
-                    newMessages = newMessages.filter(m => m.id !== currentBubbleState.loading)
-                    debugLog('🗑️ Removed loading bubble for stage:', msg.stage)
+                // Remove loading bubble if exists
+                if (currentBubbleState.loading) {
+                  newMessages = newMessages.filter(m => m.id !== currentBubbleState.loading)
+                  debugLog('🗑️ Removed loading bubble')
+                }
+                
+                // Create or find thinking bubble
+                let thinkingMsg = currentBubbleState.thinking ? 
+                  newMessages.find(m => m.id === currentBubbleState.thinking) : null
+                
+                if (!thinkingMsg) {
+                  const thinkingId = crypto.randomUUID()
+                  thinkingMsg = {
+                    id: thinkingId,
+                    type: 'assistant',
+                    content: 'AI is thinking...',
+                    timestamp: Date.now(),
+                    isThinking: true,
+                    thoughtProcess: [],
+                    isComplete: false
                   }
-                  
-                  // Create or find thinking bubble
-                  let thinkingMsg = currentBubbleState.thinking ? 
-                    newMessages.find(m => m.id === currentBubbleState.thinking) : null
-                  
-                  if (!thinkingMsg) {
-                    const thinkingId = crypto.randomUUID()
-                    thinkingMsg = {
-                      id: thinkingId,
-                      type: 'assistant',
-                      content: 'AI is thinking...',
-                      timestamp: Date.now(),
-                      isThinking: true,
-                      thoughtProcess: [],
-                      isComplete: false
-                    }
-                    newMessages.push(thinkingMsg)
-                    setCurrentBubbleState(prev => ({ ...prev, loading: undefined, thinking: thinkingId }))
-                    debugLog('💭 Created thinking bubble', { id: thinkingId, stage: msg.stage })
+                  newMessages.push(thinkingMsg)
+                  setCurrentBubbleState(prev => ({ ...prev, loading: undefined, thinking: thinkingId }))
+                  debugLog('💭 Created thinking bubble', { id: thinkingId })
+                }
+                
+                // Add thought stage
+                if (thinkingMsg.thoughtProcess) {
+                  const stage: ThoughtStage = {
+                    stage: msg.stage || 'processing',
+                    status: msg.status === 'complete' ? 'complete' : 'processing',
+                    message: msg.payload,
+                    timestamp: Date.now()
                   }
-                  
-                  // Add thought stage - always add stages to track progress
-                  if (thinkingMsg.thoughtProcess) {
-                    const stage: ThoughtStage = {
-                      stage: msg.stage || 'processing',
-                      status: msg.status === 'complete' ? 'complete' : 'processing',
-                      message: msg.payload,
-                      timestamp: Date.now()
-                    }
-                    thinkingMsg.thoughtProcess.push(stage)
-                    debugLog('📝 Added thought stage', { stage: msg.stage, status: stage.status, message: msg.payload })
-                  }
-                } else if (msg.stage === 'done') {
-                  // Complete all existing bubbles when done
-                  const thinkingMsg = currentBubbleState.thinking ? 
-                    newMessages.find(m => m.id === currentBubbleState.thinking) : null
-                  if (thinkingMsg) {
-                    if (thinkingMsg.thoughtProcess) {
-                      thinkingMsg.thoughtProcess.forEach(stage => stage.status = 'complete')
-                    }
-                    thinkingMsg.isThinking = false
-                    thinkingMsg.isComplete = true
-                    debugLog('✅ Completed thinking bubble via agno_status done')
-                  }
-                  
-                  // Clean up states
-                  setTimeout(() => {
-                    setCurrentBubbleState({})
-                    debugLog('🧹 Cleaned up bubble state via agno_status done')
-                  }, 100)
+                  thinkingMsg.thoughtProcess.push(stage)
+                  debugLog('📝 Added thought stage', stage)
                 }
                 break
               }
@@ -314,16 +292,15 @@ export default function EnhancedChatStream() {
               case 'answer_enhanced': {
                 debugLog('💬 Processing direct answer', { 
                   type: msg.type, 
-                  content: typeof msg.payload === 'string' ? msg.payload.substring(0, 50) + '...' : JSON.stringify(msg.payload).substring(0, 50) + '...' 
+                  content: msg.payload?.substring(0, 50) + '...' 
                 })
                 
                 // Clean up loading bubble
                 if (currentBubbleState.loading) {
                   newMessages = newMessages.filter(m => m.id !== currentBubbleState.loading)
-                  debugLog('🗑️ Removed loading bubble for direct answer')
                 }
                 
-                // Complete thinking bubble if exists  
+                // Complete thinking bubble if exists
                 const thinkingMsg = currentBubbleState.thinking ? 
                   newMessages.find(m => m.id === currentBubbleState.thinking) : null
                 if (thinkingMsg) {
@@ -332,39 +309,37 @@ export default function EnhancedChatStream() {
                   }
                   thinkingMsg.isThinking = false
                   thinkingMsg.isComplete = true
-                  debugLog('✅ Completed thinking bubble for direct answer')
                 }
                 
-                // For fast responses (simple queries), minimize thinking bubble visibility
-                // but keep it for debugging - just mark it as complete
-                if (thinkingMsg && thinkingMsg.thoughtProcess && 
-                    thinkingMsg.thoughtProcess.some(stage => stage.message === 'simple')) {
-                  thinkingMsg.isThinking = false
-                  thinkingMsg.isComplete = true
-                  debugLog('⚡ Fast response - completed thinking bubble immediately')
-                }
+                // Create or update response message
+                let responseMsg = currentBubbleState.response ? 
+                  newMessages.find(m => m.id === currentBubbleState.response) : null
                 
-                // Create response message
-                const responseId = crypto.randomUUID()
-                const responseMsg: ChatMessage = {
-                  id: responseId,
-                  type: 'assistant',
-                  content: typeof msg.payload === 'string' ? msg.payload : JSON.stringify(msg.payload, null, 2),
-                  timestamp: Date.now(),
-                  streaming: false,
-                  isComplete: true,
-                  chunks: thinkingMsg?.chunks || []
+                if (!responseMsg) {
+                  const responseId = crypto.randomUUID()
+                  responseMsg = {
+                    id: responseId,
+                    type: 'assistant',
+                    content: msg.payload,
+                    timestamp: Date.now(),
+                    streaming: false,
+                    isComplete: true,
+                    chunks: thinkingMsg?.chunks || []
+                  }
+                  newMessages.push(responseMsg)
+                  setCurrentBubbleState(prev => ({ ...prev, response: responseId }))
+                  debugLog('📝 Created direct answer message')
+                } else {
+                  responseMsg.content = msg.payload
+                  responseMsg.streaming = false
+                  responseMsg.isComplete = true
+                  debugLog('✏️ Updated existing response with direct answer')
                 }
-                
-                newMessages.push(responseMsg)
-                setCurrentBubbleState(prev => ({ ...prev, response: responseId }))
-                debugLog('📝 Created direct answer message', { id: responseId, contentLength: responseMsg.content.length })
                 
                 setIsStreaming(false)
-                // Clean up after a short delay to ensure UI updates
                 setTimeout(() => {
-                  setIsStreaming(false)
-                }, 50)
+                  setCurrentBubbleState({})
+                }, 100)
                 break
               }
 
@@ -421,56 +396,30 @@ export default function EnhancedChatStream() {
               }
 
               default: {
-                debugLog('❓ Unknown message type, creating fallback message', { type: msg.type, payload: msg.payload })
-                
-                // Always remove loading bubble for unknown messages
-                if (currentBubbleState.loading) {
-                  newMessages = newMessages.filter(m => m.id !== currentBubbleState.loading)
-                  debugLog('🗑️ Removed loading bubble for unknown message')
-                }
-                
-                // Create a message for unknown types
+                debugLog('❓ Unknown message type, showing as-is', { type: msg.type, payload: msg.payload })
                 const unknownMsg: ChatMessage = {
                   id: crypto.randomUUID(),
                   type: 'assistant',
-                  content: `🤔 Received: ${msg.type}\n${typeof msg.payload === 'string' ? msg.payload : JSON.stringify(msg.payload, null, 2)}`,
+                  content: `[${msg.type}]: ${typeof msg.payload === 'string' ? msg.payload : JSON.stringify(msg.payload)}`,
                   timestamp: Date.now(),
                   isComplete: true,
-                  isError: false // Don't mark as error, just show the content
+                  isError: true
                 }
                 newMessages.push(unknownMsg)
-                
-                // Clean up states
-                setIsStreaming(false)
-                setTimeout(() => {
-                  setCurrentBubbleState({})
-                }, 100)
                 break
               }
             }
           } catch (error) {
-            debugLog('💥 Error processing message:', { error: error instanceof Error ? error.message : 'Unknown error', msg })
-            
-            // Remove loading bubble on error
-            if (currentBubbleState.loading) {
-              newMessages = newMessages.filter(m => m.id !== currentBubbleState.loading)
-            }
-            
+            debugLog('💥 Error processing message:', { error, msg })
             const errorMsg: ChatMessage = {
               id: crypto.randomUUID(),
               type: 'assistant',
-              content: `⚠️ Error processing ${msg.type}: ${error instanceof Error ? error.message : 'Unknown error'}\n\nRaw message: ${JSON.stringify(msg, null, 2)}`,
+              content: `⚠️ Error processing ${msg.type}: ${error instanceof Error ? error.message : 'Unknown error'}`,
               timestamp: Date.now(),
               isComplete: true,
               isError: true
             }
             newMessages.push(errorMsg)
-            
-            // Clean up states on error
-            setIsStreaming(false)
-            setTimeout(() => {
-              setCurrentBubbleState({})
-            }, 100)
           }
 
           return { ...conv, messages: newMessages }
@@ -724,14 +673,7 @@ export default function EnhancedChatStream() {
           </div>
           {/* Debug Info */}
           <div className="text-xs text-gray-500 mt-1">
-            Bubble State: Loading={currentBubbleState.loading ? '✓' : '✗'} | 
-            Thinking={currentBubbleState.thinking ? '✓' : '✗'} | 
-            Response={currentBubbleState.response ? '✓' : '✗'}
-          </div>
-          <div className="text-xs text-gray-400 mt-1">
-            Messages: {currentMessages.length} | 
-            Streaming: {isStreaming ? 'Yes' : 'No'} | 
-            Last Msg: {currentMessages.length > 0 ? currentMessages[currentMessages.length - 1].type : 'None'}
+            Bubble State: {JSON.stringify(currentBubbleState)}
           </div>
         </div>
         
@@ -831,8 +773,7 @@ export default function EnhancedChatStream() {
             
             {/* Debug Info */}
             <div className="mt-2 text-xs text-gray-400">
-              Debug: Connected={wsConnected.toString()}, Streaming={isStreaming.toString()}, 
-              Messages={currentMessages.length}, LoadingBubbles={currentMessages.filter(m => m.isLoading).length}
+              Debug: Connected={wsConnected.toString()}, Streaming={isStreaming.toString()}, Messages={currentMessages.length}
             </div>
           </div>
         </div>

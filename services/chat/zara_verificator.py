@@ -27,8 +27,11 @@ class ZaraVerificator:
             ],
             'meta': [
                 r'^who (are|r) you\??$',
+                r'^who is zara\??$',
+                r'^what (are|r) you\??$',
                 r'^what can you do\??$',
-                r'^(help|version|explain how you work)[.!?]?\s*$'
+                r'^(help|version|explain how you work)[.!?]?\s*$',
+                r'^tell me about yourself\??$'
             ],
             'thanks': [
                 r'^(thanks?|thank you|thx|ty)[.!?]?\s*$',
@@ -90,10 +93,12 @@ class ZaraVerificator:
     def _check_fast_patterns(self, user_input: str) -> Optional[RouteDecision]:
         """Check if input matches fast response patterns"""
         clean_input = user_input.lower().strip()
+        print(f"🔍 Checking fast patterns for: '{clean_input}'")
         
         for intent_type, patterns in self.fast_patterns.items():
             for pattern in patterns:
                 if re.match(pattern, clean_input, re.IGNORECASE):
+                    print(f"✨ Fast pattern matched! Intent: {intent_type}, Pattern: {pattern}")
                     return RouteDecision(
                         intent=intent_type,
                         needs_retrieval=False,
@@ -102,6 +107,8 @@ class ZaraVerificator:
                         max_tokens=120,
                         confidence=0.95
                     )
+        
+        print(f"🔴 No fast patterns matched for: '{clean_input}'")
         return None
     
     async def _classify_intent(self, user_input: str) -> Tuple[str, float]:

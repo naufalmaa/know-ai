@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # Streamlit Assistant UI
+  assistant-streamlit:
+    build: 
+      context: ./apps/assistant-streamlit
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - CHAT_WS_URL=ws://host.docker.internal:8000/ws
+      - AGNO_URL=http://host.docker.internal:9010
+      - FILE_ID=${FILE_ID:-}
+      - USER_ID=${USER_ID:-demo}
+    volumes:
+      - ./apps/assistant-streamlit:/app
+    depends_on:
+      - postgres
+    networks:
+      - know-ai-network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-know_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-a}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - know-ai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  know-ai-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
