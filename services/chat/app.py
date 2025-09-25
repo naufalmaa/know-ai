@@ -341,7 +341,7 @@ def build_prompt(question:str, chunks:list[dict], db_context: str = "")->str:
   
   base_prompt = (
     "Answer using the CONTEXT and DATABASE INFO. If insufficient, mention available data sources. "
-    "Append a JSON array 'citations' with items {file_id,page,section}.\n\n"
+    "Append a JSON array 'citations' with items {filename,page,section}.\n\n"
   )
   
   if db_context:

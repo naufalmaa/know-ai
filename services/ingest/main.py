@@ -566,178 +566,73 @@ async def csv_to_md(url:str)->str:
   return "## CSV preview\n\n" + markdown_table
 
 async def agno_chunk_csv(csv_content: str, filename: str) -> list[dict]:
-    """CSV-specific chunking using Agno AI library (not HTTP API)"""
-    if not AGNO_AVAILABLE:
-        print("⚠️ Agno not available, using fallback CSV chunking")
-        return await fallback_csv_chunking(csv_content)
-    
-    try:
-        print(f"🚀 Using Agno library for CSV chunking: {filename}")
-        
-        # Clean up CSV content with Ollama first
-        cleaned_csv = await cleanup_with_ollama(csv_content, "csv")
-        
-        # Create temporary file for Agno to process
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
-            tmp.write(cleaned_csv)
-            tmp_path = tmp.name
-        
-        try:
-            # Set up Agno Knowledge with row chunking (based on csv_row_chunking.ipynb)
-            db_url = os.getenv("POSTGRES_URL", "postgresql://postgres:a@localhost:5432/know_ai")
-            
-            knowledge_base = Knowledge(
-                vector_db=PgVector(
-                    table_name=f"chunks_{filename.replace('.', '_')}", 
-                    db_url=db_url
-                ),
-            )
-            
-            # Use CSVReader with RowChunking strategy
-            import asyncio
-            await asyncio.to_thread(
-                knowledge_base.add_content,
-                url=f"file://{tmp_path}",
-                reader=CSVReader(chunking_strategy=RowChunking())
-            )
-            
-            # Extract chunks from the knowledge base
-            # Note: This is a simplified approach - in production you'd want to
-            # retrieve the actual chunks from the vector database
-            chunks = []
-            
-            # Parse CSV manually for chunk creation
-            import pandas as pd
-            df = pd.read_csv(tmp_path)
-            
-            for i, row in df.iterrows():
-                chunk_text = "\n".join([f"{col}: {row[col]}" for col in df.columns])
-                chunks.append({
-                    "idx": i,
-                    "text": chunk_text,
-                    "page": 0,
-                    "section": f"row-{i+1}",
-                    "chunk_type": "csv_row"
-                })
-            
-            print(f"✅ Agno CSV chunking successful: {len(chunks)} chunks")
-            return chunks
-            
-        finally:
-            # Clean up temp file
-            import os
-            try:
-                os.unlink(tmp_path)
-            except:
-                pass
-                
-    except Exception as e:
-        print(f"⚠️ Agno CSV chunking error: {e}")
-        return await fallback_csv_chunking(csv_content)
+    """CSV-specific chunking using fallback method (Agno integration disabled for stability)"""
+    print(f"📈 Processing CSV with fallback chunking: {filename}")
+    return await fallback_csv_chunking(csv_content)
 
 async def agno_chunk_markdown(md: str, filename: str) -> list[dict]:
-    """Markdown-specific chunking using Agno AI library (not HTTP API)"""
-    if not AGNO_AVAILABLE:
-        print("⚠️ Agno not available, using fallback markdown chunking")
-        return chunk_markdown(md)
+    """Markdown-specific chunking using enhanced fallback method (Agno integration disabled for stability)"""
+    print(f"📝 Processing markdown with enhanced chunking: {filename}")
     
     try:
-        print(f"🚀 Using Agno library for markdown chunking: {filename}")
-        
-        # Clean up markdown content with Ollama first
+        # Clean up markdown content with Ollama first for better results
         cleaned_md = await cleanup_with_ollama(md, "markdown")
+        if not cleaned_md.strip():
+            cleaned_md = md  # Fallback to original if cleanup fails
         
-        # Create temporary file for Agno to process
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as tmp:
-            tmp.write(cleaned_md)
-            tmp_path = tmp.name
+        # Enhanced markdown chunking based on structure
+        lines = cleaned_md.split('\n')
+        chunks = []
+        current_chunk = ""
+        current_section = "intro"
+        chunk_idx = 0
         
-        try:
-            # Set up Agno Knowledge with markdown chunking (based on markdown_chunking.ipynb)
-            db_url = os.getenv("POSTGRES_URL", "postgresql://postgres:a@localhost:5432/know_ai")
-            
-            knowledge = Knowledge(
-                vector_db=PgVector(
-                    table_name=f"chunks_{filename.replace('.', '_')}", 
-                    db_url=db_url
-                ),
-            )
-            
-            # Use MarkdownReader with MarkdownChunking strategy
-            import asyncio
-            await asyncio.to_thread(
-                knowledge.add_content,
-                url=f"file://{tmp_path}",
-                reader=MarkdownReader(
-                    name="Enhanced Markdown Chunking Reader",
-                    chunking_strategy=MarkdownChunking(),
-                )
-            )
-            
-            # For now, create chunks manually based on markdown structure
-            # In production, you'd retrieve from the vector database
-            lines = cleaned_md.split('\n')
-            chunks = []
-            current_chunk = ""
-            current_section = "intro"
-            chunk_idx = 0
-            
-            for line in lines:
-                if line.startswith('#'):
-                    # Save previous chunk if it exists
-                    if current_chunk.strip():
-                        chunks.append({
-                            "idx": chunk_idx,
-                            "text": current_chunk.strip(),
-                            "page": 0,
-                            "section": current_section,
-                            "chunk_type": "markdown_section"
-                        })
-                        chunk_idx += 1
-                    
-                    # Start new chunk
-                    current_section = line.strip('#').strip()[:50]  # First 50 chars as section name
-                    current_chunk = line + '\n'
-                else:
-                    current_chunk += line + '\n'
-                    
-                    # Split large chunks
-                    if len(current_chunk) > 1500:
-                        chunks.append({
-                            "idx": chunk_idx,
-                            "text": current_chunk.strip(),
-                            "page": 0,
-                            "section": current_section,
-                            "chunk_type": "markdown_section"
-                        })
-                        chunk_idx += 1
-                        current_chunk = ""
-            
-            # Add final chunk
-            if current_chunk.strip():
-                chunks.append({
-                    "idx": chunk_idx,
-                    "text": current_chunk.strip(),
-                    "page": 0,
-                    "section": current_section,
-                    "chunk_type": "markdown_section"
-                })
-            
-            print(f"✅ Agno markdown chunking successful: {len(chunks)} chunks")
-            return chunks
-            
-        finally:
-            # Clean up temp file
-            import os
-            try:
-                os.unlink(tmp_path)
-            except:
-                pass
+        for line in lines:
+            if line.startswith('#'):
+                # Save previous chunk if it exists
+                if current_chunk.strip():
+                    chunks.append({
+                        "idx": chunk_idx,
+                        "text": current_chunk.strip(),
+                        "page": 0,
+                        "section": current_section,
+                        "chunk_type": "markdown_section"
+                    })
+                    chunk_idx += 1
                 
+                # Start new chunk
+                current_section = line.strip('#').strip()[:50]  # First 50 chars as section name
+                current_chunk = line + '\n'
+            else:
+                current_chunk += line + '\n'
+                
+                # Split large chunks (keep under 1500 chars for better processing)
+                if len(current_chunk) > 1500:
+                    chunks.append({
+                        "idx": chunk_idx,
+                        "text": current_chunk.strip(),
+                        "page": 0,
+                        "section": current_section,
+                        "chunk_type": "markdown_section"
+                    })
+                    chunk_idx += 1
+                    current_chunk = ""
+        
+        # Add final chunk
+        if current_chunk.strip():
+            chunks.append({
+                "idx": chunk_idx,
+                "text": current_chunk.strip(),
+                "page": 0,
+                "section": current_section,
+                "chunk_type": "markdown_section"
+            })
+        
+        print(f"✅ Enhanced markdown chunking successful: {len(chunks)} chunks")
+        return chunks
+        
     except Exception as e:
-        print(f"⚠️ Agno markdown chunking error: {e}")
+        print(f"⚠️ Enhanced markdown chunking error: {e}, falling back to basic chunking")
         return chunk_markdown(md)
 
 async def fallback_csv_chunking(csv_content: str) -> list[dict]:

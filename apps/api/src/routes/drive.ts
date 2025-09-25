@@ -1,5 +1,19 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+
+// Create S3 client for MinIO
+function createS3Client() {
+  return new S3Client({
+    endpoint: process.env.S3_ENDPOINT,
+    region: process.env.S3_REGION || 'us-east-1',
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!
+    }
+  })
+}
 
 
 export async function routes(app: FastifyInstance) {
@@ -37,14 +51,27 @@ export async function routes(app: FastifyInstance) {
   })
 
   // Create folder
-  app.post('/api/drive/folder', async (req) => {
+  app.post('/api/drive/folder', async (req, rep) => {
     const { name, parent_id } = req.body as any
-    const user = { id: 'demo-user' }
-    const r = await db.query(
-      'insert into folders(name,parent_id,owner_id) values($1,$2,$3) returning *',
-      [name, parent_id || null, user.id]
-    )
-    return r.rows[0]
+    
+    if (!name || !name.trim()) {
+      return rep.code(400).send({ error: 'Folder name is required' })
+    }
+    
+    try {
+      // Use a demo user UUID that should exist in the users table
+      const userId = '550e8400-e29b-41d4-a716-446655440000'
+      
+      const r = await db.query(
+        'insert into folders(name,parent_id,owner_id) values($1,$2,$3) returning *',
+        [name.trim(), parent_id || null, userId]
+      )
+      
+      return r.rows[0]
+    } catch (error: any) {
+      console.error('Folder creation error:', error)
+      return rep.code(500).send({ error: 'Failed to create folder', details: error.message })
+    }
   })
 
   // Rename folder
@@ -61,6 +88,75 @@ export async function routes(app: FastifyInstance) {
     const { folder_id } = req.body as any
     const r = await db.query('update files set folder_id=$1 where id=$2 returning *', [folder_id || null, id])
     return r.rows[0]
+  })
+
+  // Delete folder
+  app.delete('/api/drive/folder/:id', async (req, rep) => {
+    const { id } = req.params as any
+    
+    // Check if folder has children
+    const children = await db.query(
+      'select count(*) as count from folders where parent_id = $1',
+      [id]
+    )
+    const files = await db.query(
+      'select count(*) as count from files where folder_id = $1',
+      [id]
+    )
+    
+    if (parseInt(children.rows[0].count) > 0 || parseInt(files.rows[0].count) > 0) {
+      return rep.code(409).send({ error: 'Cannot delete non-empty folder' })
+    }
+    
+    await db.query('delete from folders where id = $1', [id])
+    return rep.code(204).send()
+  })
+
+  // Rename file
+  app.patch('/api/files/:id', async (req) => {
+    const { id } = req.params as any
+    const { filename } = req.body as any
+    const r = await db.query('update files set filename=$1 where id=$2 returning *', [filename, id])
+    return r.rows[0]
+  })
+
+  // Delete file
+  app.delete('/api/files/:id', async (req, rep) => {
+    const { id } = req.params as any
+    
+    try {
+      // Get file info first to get S3 key
+      const fileQuery = await db.query('select s3_key from files where id = $1', [id])
+      
+      if (fileQuery.rowCount === 0) {
+        return rep.code(404).send({ error: 'File not found' })
+      }
+      
+      const s3Key = fileQuery.rows[0].s3_key
+      
+      // Delete from database first
+      await db.query('delete from files where id = $1', [id])
+      
+      // Delete from MinIO/S3 if s3_key exists
+      if (s3Key) {
+        try {
+          const s3 = createS3Client()
+          const deleteCommand = new DeleteObjectCommand({
+            Bucket: process.env.S3_BUCKET_RAW!,
+            Key: s3Key
+          })
+          const result = await s3.send(deleteCommand)
+        } catch (s3Error) {
+          console.error('Failed to delete from S3:', s3Error)
+          // Don't fail the whole operation if S3 delete fails
+        }
+      }
+      
+      return rep.code(204).send()
+    } catch (error) {
+      console.error('Delete file error:', error)
+      return rep.code(500).send({ error: 'Failed to delete file' })
+    }
   })
 
   // Quick search

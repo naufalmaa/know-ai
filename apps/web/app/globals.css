@@ -1,2 +1,206 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
+
+/* Drive UI Animations and Polish */
+
+/* Folder/File item animations */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-out {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.3s ease-out;
+}
+
+.animate-fade-out {
+  animation: fade-out 0.2s ease-in;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Focus styles for accessibility */
+.focus-visible:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Context menu styles */
+.context-menu {
+  animation: pop-in 0.15s ease-out;
+}
+
+/* Toast notification styles */
+.toast-enter {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.toast-enter-active {
+  transform: translateX(0);
+  opacity: 1;
+  transition: all 0.3s ease-out;
+}
+
+.toast-exit {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast-exit-active {
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 0.3s ease-in;
+}
+
+/* Custom scrollbars */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f7fafc;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e0;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #a0aec0;
+}
+
+/* File grid layout improvements */
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+
+/* Selection styles */
+.item-selected {
+  background-color: #dbeafe;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+/* Drag and drop styles */
+.drag-over {
+  background-color: #eff6ff;
+  border-color: #3b82f6;
+  border-style: dashed;
+}
+
+/* Loading states */
+.loading-overlay {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(2px);
+}
+
+/* Modal animations */
+.modal-backdrop {
+  animation: fade-in 0.3s ease-out;
+}
+
+.modal-content {
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Button hover effects */
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}

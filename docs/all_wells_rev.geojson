@@ -1,0 +1,15 @@
+{
+"type": "FeatureCollection",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "name": "Well-E1", "orient": "Directional", "status": "Active", "purpose": "Production", "type": "Oil", "block": "North Sumatera Offshore" }, "geometry": { "type": "Point", "coordinates": [ 96.330693970619393, 5.274582053934495 ] } },
+{ "type": "Feature", "properties": { "name": "Well-N1", "orient": "Vertical", "status": "Active", "purpose": "Production", "type": "Gas", "block": "Andaman I-II" }, "geometry": { "type": "Point", "coordinates": [ 96.198678204125656, 5.445104691476473 ] } },
+{ "type": "Feature", "properties": { "name": "Well-W1", "orient": "Directional", "status": "Active", "purpose": "Production", "type": "Oil", "block": "Andaman III" }, "geometry": { "type": "Point", "coordinates": [ 96.114060168773619, 5.336543146440263 ] } },
+{ "type": "Feature", "properties": { "name": "Well-E2", "orient": "Directional", "status": "Abandonment", "purpose": "Exploration", "type": "Oil", "block": "North Sumatera Offshore" }, "geometry": { "type": "Point", "coordinates": [ 96.30160412948743, 5.324515664730015 ] } },
+{ "type": "Feature", "properties": { "name": "Well-N2", "orient": "Directional", "status": "Shut-in", "purpose": "Injection", "type": "Water", "block": "Andaman I-II" }, "geometry": { "type": "Point", "coordinates": [ 96.109396152280226, 5.43307935770973 ] } },
+{ "type": "Feature", "properties": { "name": "Well-C1", "orient": "Vertical", "status": "Active", "purpose": "Production", "type": "Oil", "block": "South Andaman" }, "geometry": { "type": "Point", "coordinates": [ 96.21455700188983, 5.368231684109816 ] } },
+{ "type": "Feature", "properties": { "name": "Well-S1", "orient": "Directional", "status": "Active", "purpose": "Production", "type": "Gas", "block": "Lhokseumawe" }, "geometry": { "type": "Point", "coordinates": [ 96.175577497678603, 5.308957589408692 ] } },
+{ "type": "Feature", "properties": { "name": "Well-W2", "orient": "Vertical", "status": "Shut-in", "purpose": "Injection", "type": "Water", "block": "Andaman III" }, "geometry": { "type": "Point", "coordinates": [ 96.09407489796655, 5.380579730719035 ] } },
+{ "type": "Feature", "properties": { "name": "Well-E3", "orient": "Horizontal", "status": "Suspended", "purpose": "Monitoring", "type": "Oil", "block": "North Sumatera Offshore" }, "geometry": { "type": "Point", "coordinates": [ 96.440638126308897, 5.267321183525269 ] } }
+]
+}

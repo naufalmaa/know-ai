@@ -109,26 +109,78 @@ export async function routes(app: FastifyInstance) {
         { expiresIn: 600 }
       )
 
-      // Fire-and-forget ingest
-      fetch(`http://127.0.0.1:${process.env.INGEST_PORT || 9009}/ingest/file`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          file_id,
-          s3_signed_url: signedGet,
-          filename: fileRecord.filename,
-          checksum,
-          mime_type: fileRecord.mime_type
+      // Fire-and-forget ingest and processing pipeline
+      const processingPromises = [
+        // Original ingest service
+        fetch(`http://127.0.0.1:${process.env.INGEST_PORT || 9009}/ingest/file`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_id,
+            s3_signed_url: signedGet,
+            filename: fileRecord.filename,
+            checksum,
+            mime_type: fileRecord.mime_type
+          })
+        }).catch(err => {
+          console.log('Ingest service unavailable:', err.message)
+        }),
+        
+        // // Parser service for content extraction
+        // fetch(`http://127.0.0.1:${process.env.PARSER_PORT || 9008}/parse/file`, {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({
+        //     file_id,
+        //     s3_signed_url: signedGet,
+        //     filename: fileRecord.filename,
+        //     mime_type: fileRecord.mime_type
+        //   })
+        // }).catch(err => {
+        //   console.log('Parser service unavailable:', err.message)
+        // }),
+        
+        // Agno service for AI processing and chunking
+        fetch(`http://127.0.0.1:${process.env.AGNO_PORT || 9010}/process/file`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_id,
+            s3_signed_url: signedGet,
+            filename: fileRecord.filename,
+            mime_type: fileRecord.mime_type
+          })
+        }).catch(err => {
+          console.log('Agno service unavailable:', err.message)
         })
-      }).catch(err => {
-        console.log('Ingest service unavailable:', err.message)
-      })
+      ]
+      
+      // Update file status to processing
+      await db.query('update files set processing_status = $1 where id = $2', [
+        'processing',
+        file_id
+      ])
 
       return fileRecord
     } catch (error: any) {
       console.error('Upload complete error:', error)
       return reply.code(500).send({ error: 'Failed to complete upload', details: error.message })
     }
+  })
+
+  // Get file processing status
+  app.get('/api/files/:id/status', async (req, rep) => {
+    const { id } = req.params as any
+    const q = await db.query(`
+      select f.id, f.filename, f.processing_status, f.created_at,
+             m.doc_type, m.basin, m.block, m.indexed, m.chunks_count
+      from files f 
+      left join file_metadata m on m.file_id = f.id 
+      where f.id = $1
+    `, [id])
+    
+    if (!q.rowCount) return rep.notFound()
+    return q.rows[0]
   })
 
   // (Optional) fetch signed URL for preview

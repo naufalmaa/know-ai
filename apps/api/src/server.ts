@@ -4,8 +4,11 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import sensible from '@fastify/sensible'
 import jwt from '@fastify/jwt'
+import cookie from '@fastify/cookie'
 import { routes as health } from './routes/health'
-import { routes as auth } from './routes/auth'
+// CHANGED: Import the middleware functions directly from auth.ts
+import { routes as auth, requireAuth, requirePermission } from './routes/auth'
+import { routes as users } from './routes/users'
 import { routes as folders } from './routes/folders'
 import { routes as files } from './routes/files'
 import { routes as metadata } from './routes/metadata'
@@ -36,11 +39,25 @@ console.log('[API] S3_ENDPOINT=', process.env.S3_ENDPOINT, 'S3_REGION=', process
 
 const app = Fastify({ logger: true })
 await app.register(sensible)
-await app.register(cors, { origin: true, credentials: true })
+await app.register(cookie)
+await app.register(cors, { 
+  origin: true, 
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+})
 await app.register(jwt, { secret: process.env.JWT_SECRET || 'dev' })
 
+// CHANGED: Decorate the main Fastify instance BEFORE registering any routes.
+// This is a more robust pattern that ensures these functions are available everywhere.
+app.decorate('requireAuth', requireAuth)
+app.decorate('requirePermission', requirePermission)
+
+// Register auth routes first to make middleware available
+await app.register(auth)
+
 app.register(health)
-app.register(auth)
+app.register(users)
 app.register(folders)
 app.register(files)
 app.register(metadata)

@@ -2,15 +2,16 @@ import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 
 export async function routes(app: FastifyInstance) {
-  app.post('/api/folders', async (req) => {
-    const { name, parent_id } = req.body as any
-    const user = { id: 'demo-user' }
-    const r = await db.query(
-      'insert into folders(name,parent_id,owner_id) values($1,$2,$3) returning *',
-      [name, parent_id || null, user.id]
-    )
-    return r.rows[0]
-  })
+  // DEPRECATED: Use POST /api/drive/folder instead
+  // app.post('/api/folders', async (req) => {
+  //   const { name, parent_id } = req.body as any
+  //   const user = { id: 'demo-user' }
+  //   const r = await db.query(
+  //     'insert into folders(name,parent_id,owner_id) values($1,$2,$3) returning *',
+  //     [name, parent_id || null, user.id]
+  //   )
+  //   return r.rows[0]
+  // })
 
   app.get('/api/files', async () => {
     const rows = await db.query(`

@@ -1,6 +1,6 @@
 create extension if not exists pgcrypto;
 
-create table users(
+create table if not exists users(
   id uuid primary key default gen_random_uuid(),
   email text unique not null,
   password_hash text,
@@ -8,7 +8,7 @@ create table users(
   created_at timestamptz default now()
 );
 
-create table folders(
+create table if not exists folders(
   id uuid primary key default gen_random_uuid(),
   parent_id uuid references folders(id) on delete cascade,
   owner_id uuid references users(id),
@@ -16,7 +16,7 @@ create table folders(
   created_at timestamptz default now()
 );
 
-create table files(
+create table if not exists files(
   id uuid primary key default gen_random_uuid(),
   folder_id uuid references folders(id) on delete set null,
   owner_id uuid references users(id),
@@ -26,10 +26,11 @@ create table files(
   checksum text,
   s3_key text not null unique,
   version int not null default 1,
+  processing_status text default 'pending',
   created_at timestamptz default now()
 );
 
-create table file_metadata(
+create table if not exists file_metadata(
   id uuid primary key default gen_random_uuid(),
   file_id uuid references files(id) on delete cascade,
   doc_type text,
@@ -39,11 +40,12 @@ create table file_metadata(
   survey_type text,
   formation text,
   indexed boolean default false,
+  chunks_count int default 0,
   updated_at timestamptz default now(),
   unique(file_id)
 );
 
-create table sessions(
+create table if not exists sessions(
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id),
   token text unique,

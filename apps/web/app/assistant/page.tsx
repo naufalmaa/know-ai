@@ -29,9 +29,6 @@ export default function AssistantPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <h2 className="text-xl font-semibold text-gray-700">Loading AI Assistant...</h2>
             <p className="text-gray-500 mt-2">Starting Streamlit interface</p>
-            <div className="mt-4 text-sm text-gray-400">
-              Make sure the Streamlit service is running on port 8501
-            </div>
           </div>
         </div>
       )}
