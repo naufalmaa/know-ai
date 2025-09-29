@@ -12,7 +12,7 @@
  Target Server Version : 170004 (170004)
  File Encoding         : 65001
 
- Date: 24/09/2025 18:03:50
+ Date: 25/09/2025 16:31:53
 */
 
 
@@ -85,6 +85,24 @@ MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
+
+-- ----------------------------
+-- Table structure for audit_logs
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."audit_logs";
+CREATE TABLE "public"."audit_logs" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_id" uuid,
+  "action" text COLLATE "pg_catalog"."default" NOT NULL,
+  "resource_type" text COLLATE "pg_catalog"."default" NOT NULL,
+  "resource_id" uuid,
+  "old_values" jsonb,
+  "new_values" jsonb,
+  "ip_address" inet,
+  "user_agent" text COLLATE "pg_catalog"."default",
+  "created_at" timestamptz(6) DEFAULT now()
+)
+;
 
 -- ----------------------------
 -- Table structure for doc_chunks
@@ -178,6 +196,20 @@ CREATE TABLE "public"."geo_wells" (
 ;
 
 -- ----------------------------
+-- Table structure for permissions
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."permissions";
+CREATE TABLE "public"."permissions" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "name" text COLLATE "pg_catalog"."default" NOT NULL,
+  "description" text COLLATE "pg_catalog"."default",
+  "resource" text COLLATE "pg_catalog"."default" NOT NULL,
+  "action" text COLLATE "pg_catalog"."default" NOT NULL,
+  "created_at" timestamptz(6) DEFAULT now()
+)
+;
+
+-- ----------------------------
 -- Table structure for production_timeseries
 -- ----------------------------
 DROP TABLE IF EXISTS "public"."production_timeseries";
@@ -187,6 +219,19 @@ CREATE TABLE "public"."production_timeseries" (
   "gas_mmscfd" float8 NOT NULL,
   "tenant_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'demo'::text,
   "id" int8 NOT NULL DEFAULT nextval('production_timeseries_id_seq'::regclass)
+)
+;
+
+-- ----------------------------
+-- Table structure for role_permissions
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."role_permissions";
+CREATE TABLE "public"."role_permissions" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "role" text COLLATE "pg_catalog"."default" NOT NULL,
+  "permission_id" uuid,
+  "granted" bool DEFAULT true,
+  "created_at" timestamptz(6) DEFAULT now()
 )
 ;
 
@@ -212,7 +257,13 @@ CREATE TABLE "public"."users" (
   "email" text COLLATE "pg_catalog"."default" NOT NULL,
   "password_hash" text COLLATE "pg_catalog"."default",
   "role" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'user'::text,
-  "created_at" timestamptz(6) DEFAULT now()
+  "created_at" timestamptz(6) DEFAULT now(),
+  "first_name" text COLLATE "pg_catalog"."default",
+  "last_name" text COLLATE "pg_catalog"."default",
+  "is_active" bool DEFAULT true,
+  "last_login" timestamptz(6),
+  "created_by" uuid,
+  "updated_at" timestamptz(6) DEFAULT now()
 )
 ;
 
@@ -261,24 +312,6 @@ CREATE FUNCTION "public"."armor"(bytea, _text, _text)
 -- ----------------------------
 -- Function structure for array_to_halfvec
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."array_to_halfvec"(_numeric, int4, bool);
-CREATE FUNCTION "public"."array_to_halfvec"(_numeric, int4, bool)
-  RETURNS "public"."halfvec" AS '$libdir/vector', 'array_to_halfvec'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
-
--- ----------------------------
--- Function structure for array_to_halfvec
--- ----------------------------
-DROP FUNCTION IF EXISTS "public"."array_to_halfvec"(_float8, int4, bool);
-CREATE FUNCTION "public"."array_to_halfvec"(_float8, int4, bool)
-  RETURNS "public"."halfvec" AS '$libdir/vector', 'array_to_halfvec'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
-
--- ----------------------------
--- Function structure for array_to_halfvec
--- ----------------------------
 DROP FUNCTION IF EXISTS "public"."array_to_halfvec"(_float4, int4, bool);
 CREATE FUNCTION "public"."array_to_halfvec"(_float4, int4, bool)
   RETURNS "public"."halfvec" AS '$libdir/vector', 'array_to_halfvec'
@@ -295,11 +328,20 @@ CREATE FUNCTION "public"."array_to_halfvec"(_int4, int4, bool)
   COST 1;
 
 -- ----------------------------
--- Function structure for array_to_sparsevec
+-- Function structure for array_to_halfvec
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."array_to_sparsevec"(_float8, int4, bool);
-CREATE FUNCTION "public"."array_to_sparsevec"(_float8, int4, bool)
-  RETURNS "public"."sparsevec" AS '$libdir/vector', 'array_to_sparsevec'
+DROP FUNCTION IF EXISTS "public"."array_to_halfvec"(_float8, int4, bool);
+CREATE FUNCTION "public"."array_to_halfvec"(_float8, int4, bool)
+  RETURNS "public"."halfvec" AS '$libdir/vector', 'array_to_halfvec'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for array_to_halfvec
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."array_to_halfvec"(_numeric, int4, bool);
+CREATE FUNCTION "public"."array_to_halfvec"(_numeric, int4, bool)
+  RETURNS "public"."halfvec" AS '$libdir/vector', 'array_to_halfvec'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -317,6 +359,15 @@ CREATE FUNCTION "public"."array_to_sparsevec"(_int4, int4, bool)
 -- ----------------------------
 DROP FUNCTION IF EXISTS "public"."array_to_sparsevec"(_float4, int4, bool);
 CREATE FUNCTION "public"."array_to_sparsevec"(_float4, int4, bool)
+  RETURNS "public"."sparsevec" AS '$libdir/vector', 'array_to_sparsevec'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for array_to_sparsevec
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."array_to_sparsevec"(_float8, int4, bool);
+CREATE FUNCTION "public"."array_to_sparsevec"(_float8, int4, bool)
   RETURNS "public"."sparsevec" AS '$libdir/vector', 'array_to_sparsevec'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
@@ -369,18 +420,18 @@ CREATE FUNCTION "public"."array_to_vector"(_float8, int4, bool)
 -- ----------------------------
 -- Function structure for binary_quantize
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."binary_quantize"("public"."halfvec");
-CREATE FUNCTION "public"."binary_quantize"("public"."halfvec")
-  RETURNS "pg_catalog"."bit" AS '$libdir/vector', 'halfvec_binary_quantize'
+DROP FUNCTION IF EXISTS "public"."binary_quantize"("public"."vector");
+CREATE FUNCTION "public"."binary_quantize"("public"."vector")
+  RETURNS "pg_catalog"."bit" AS '$libdir/vector', 'binary_quantize'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
 -- ----------------------------
 -- Function structure for binary_quantize
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."binary_quantize"("public"."vector");
-CREATE FUNCTION "public"."binary_quantize"("public"."vector")
-  RETURNS "pg_catalog"."bit" AS '$libdir/vector', 'binary_quantize'
+DROP FUNCTION IF EXISTS "public"."binary_quantize"("public"."halfvec");
+CREATE FUNCTION "public"."binary_quantize"("public"."halfvec")
+  RETURNS "pg_catalog"."bit" AS '$libdir/vector', 'halfvec_binary_quantize'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -396,18 +447,18 @@ CREATE FUNCTION "public"."cosine_distance"("public"."halfvec", "public"."halfvec
 -- ----------------------------
 -- Function structure for cosine_distance
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."cosine_distance"("public"."sparsevec", "public"."sparsevec");
-CREATE FUNCTION "public"."cosine_distance"("public"."sparsevec", "public"."sparsevec")
-  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'sparsevec_cosine_distance'
+DROP FUNCTION IF EXISTS "public"."cosine_distance"("public"."vector", "public"."vector");
+CREATE FUNCTION "public"."cosine_distance"("public"."vector", "public"."vector")
+  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'cosine_distance'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
 -- ----------------------------
 -- Function structure for cosine_distance
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."cosine_distance"("public"."vector", "public"."vector");
-CREATE FUNCTION "public"."cosine_distance"("public"."vector", "public"."vector")
-  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'cosine_distance'
+DROP FUNCTION IF EXISTS "public"."cosine_distance"("public"."sparsevec", "public"."sparsevec");
+CREATE FUNCTION "public"."cosine_distance"("public"."sparsevec", "public"."sparsevec")
+  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'sparsevec_cosine_distance'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -450,8 +501,8 @@ CREATE FUNCTION "public"."decrypt_iv"(bytea, bytea, bytea, text)
 -- ----------------------------
 -- Function structure for digest
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."digest"(bytea, text);
-CREATE FUNCTION "public"."digest"(bytea, text)
+DROP FUNCTION IF EXISTS "public"."digest"(text, text);
+CREATE FUNCTION "public"."digest"(text, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pg_digest'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
@@ -459,8 +510,8 @@ CREATE FUNCTION "public"."digest"(bytea, text)
 -- ----------------------------
 -- Function structure for digest
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."digest"(text, text);
-CREATE FUNCTION "public"."digest"(text, text)
+DROP FUNCTION IF EXISTS "public"."digest"(bytea, text);
+CREATE FUNCTION "public"."digest"(bytea, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pg_digest'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
@@ -504,18 +555,18 @@ CREATE FUNCTION "public"."gen_random_uuid"()
 -- ----------------------------
 -- Function structure for gen_salt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."gen_salt"(text, int4);
-CREATE FUNCTION "public"."gen_salt"(text, int4)
-  RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pg_gen_salt_rounds'
+DROP FUNCTION IF EXISTS "public"."gen_salt"(text);
+CREATE FUNCTION "public"."gen_salt"(text)
+  RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pg_gen_salt'
   LANGUAGE c VOLATILE STRICT
   COST 1;
 
 -- ----------------------------
 -- Function structure for gen_salt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."gen_salt"(text);
-CREATE FUNCTION "public"."gen_salt"(text)
-  RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pg_gen_salt'
+DROP FUNCTION IF EXISTS "public"."gen_salt"(text, int4);
+CREATE FUNCTION "public"."gen_salt"(text, int4)
+  RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pg_gen_salt_rounds'
   LANGUAGE c VOLATILE STRICT
   COST 1;
 
@@ -765,8 +816,8 @@ CREATE FUNCTION "public"."hamming_distance"(bit, bit)
 -- ----------------------------
 -- Function structure for hmac
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."hmac"(text, text, text);
-CREATE FUNCTION "public"."hmac"(text, text, text)
+DROP FUNCTION IF EXISTS "public"."hmac"(bytea, bytea, text);
+CREATE FUNCTION "public"."hmac"(bytea, bytea, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pg_hmac'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
@@ -774,8 +825,8 @@ CREATE FUNCTION "public"."hmac"(text, text, text)
 -- ----------------------------
 -- Function structure for hmac
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."hmac"(bytea, bytea, text);
-CREATE FUNCTION "public"."hmac"(bytea, bytea, text)
+DROP FUNCTION IF EXISTS "public"."hmac"(text, text, text);
+CREATE FUNCTION "public"."hmac"(text, text, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pg_hmac'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
@@ -819,15 +870,6 @@ CREATE FUNCTION "public"."hnswhandler"(internal)
 -- ----------------------------
 -- Function structure for inner_product
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."inner_product"("public"."vector", "public"."vector");
-CREATE FUNCTION "public"."inner_product"("public"."vector", "public"."vector")
-  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'inner_product'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
-
--- ----------------------------
--- Function structure for inner_product
--- ----------------------------
 DROP FUNCTION IF EXISTS "public"."inner_product"("public"."halfvec", "public"."halfvec");
 CREATE FUNCTION "public"."inner_product"("public"."halfvec", "public"."halfvec")
   RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'halfvec_inner_product'
@@ -840,6 +882,15 @@ CREATE FUNCTION "public"."inner_product"("public"."halfvec", "public"."halfvec")
 DROP FUNCTION IF EXISTS "public"."inner_product"("public"."sparsevec", "public"."sparsevec");
 CREATE FUNCTION "public"."inner_product"("public"."sparsevec", "public"."sparsevec")
   RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'sparsevec_inner_product'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for inner_product
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."inner_product"("public"."vector", "public"."vector");
+CREATE FUNCTION "public"."inner_product"("public"."vector", "public"."vector")
+  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'inner_product'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -891,6 +942,15 @@ CREATE FUNCTION "public"."l1_distance"("public"."halfvec", "public"."halfvec")
 -- ----------------------------
 -- Function structure for l1_distance
 -- ----------------------------
+DROP FUNCTION IF EXISTS "public"."l1_distance"("public"."vector", "public"."vector");
+CREATE FUNCTION "public"."l1_distance"("public"."vector", "public"."vector")
+  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'l1_distance'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for l1_distance
+-- ----------------------------
 DROP FUNCTION IF EXISTS "public"."l1_distance"("public"."sparsevec", "public"."sparsevec");
 CREATE FUNCTION "public"."l1_distance"("public"."sparsevec", "public"."sparsevec")
   RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'sparsevec_l1_distance'
@@ -898,11 +958,11 @@ CREATE FUNCTION "public"."l1_distance"("public"."sparsevec", "public"."sparsevec
   COST 1;
 
 -- ----------------------------
--- Function structure for l1_distance
+-- Function structure for l2_distance
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."l1_distance"("public"."vector", "public"."vector");
-CREATE FUNCTION "public"."l1_distance"("public"."vector", "public"."vector")
-  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'l1_distance'
+DROP FUNCTION IF EXISTS "public"."l2_distance"("public"."halfvec", "public"."halfvec");
+CREATE FUNCTION "public"."l2_distance"("public"."halfvec", "public"."halfvec")
+  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'halfvec_l2_distance'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -925,24 +985,6 @@ CREATE FUNCTION "public"."l2_distance"("public"."vector", "public"."vector")
   COST 1;
 
 -- ----------------------------
--- Function structure for l2_distance
--- ----------------------------
-DROP FUNCTION IF EXISTS "public"."l2_distance"("public"."halfvec", "public"."halfvec");
-CREATE FUNCTION "public"."l2_distance"("public"."halfvec", "public"."halfvec")
-  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'halfvec_l2_distance'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
-
--- ----------------------------
--- Function structure for l2_norm
--- ----------------------------
-DROP FUNCTION IF EXISTS "public"."l2_norm"("public"."halfvec");
-CREATE FUNCTION "public"."l2_norm"("public"."halfvec")
-  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'halfvec_l2_norm'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
-
--- ----------------------------
 -- Function structure for l2_norm
 -- ----------------------------
 DROP FUNCTION IF EXISTS "public"."l2_norm"("public"."sparsevec");
@@ -952,11 +994,11 @@ CREATE FUNCTION "public"."l2_norm"("public"."sparsevec")
   COST 1;
 
 -- ----------------------------
--- Function structure for l2_normalize
+-- Function structure for l2_norm
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."l2_normalize"("public"."sparsevec");
-CREATE FUNCTION "public"."l2_normalize"("public"."sparsevec")
-  RETURNS "public"."sparsevec" AS '$libdir/vector', 'sparsevec_l2_normalize'
+DROP FUNCTION IF EXISTS "public"."l2_norm"("public"."halfvec");
+CREATE FUNCTION "public"."l2_norm"("public"."halfvec")
+  RETURNS "pg_catalog"."float8" AS '$libdir/vector', 'halfvec_l2_norm'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -977,6 +1019,38 @@ CREATE FUNCTION "public"."l2_normalize"("public"."vector")
   RETURNS "public"."vector" AS '$libdir/vector', 'l2_normalize'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
+
+-- ----------------------------
+-- Function structure for l2_normalize
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."l2_normalize"("public"."sparsevec");
+CREATE FUNCTION "public"."l2_normalize"("public"."sparsevec")
+  RETURNS "public"."sparsevec" AS '$libdir/vector', 'sparsevec_l2_normalize'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for log_user_action
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."log_user_action"("p_user_id" uuid, "p_action" text, "p_resource_type" text, "p_resource_id" uuid, "p_old_values" jsonb, "p_new_values" jsonb, "p_ip_address" inet, "p_user_agent" text);
+CREATE FUNCTION "public"."log_user_action"("p_user_id" uuid, "p_action" text, "p_resource_type" text, "p_resource_id" uuid=NULL::uuid, "p_old_values" jsonb=NULL::jsonb, "p_new_values" jsonb=NULL::jsonb, "p_ip_address" inet=NULL::inet, "p_user_agent" text=NULL::text)
+  RETURNS "pg_catalog"."uuid" AS $BODY$
+declare
+  log_id uuid;
+begin
+  insert into audit_logs (
+    user_id, action, resource_type, resource_id, 
+    old_values, new_values, ip_address, user_agent
+  ) values (
+    p_user_id, p_action, p_resource_type, p_resource_id,
+    p_old_values, p_new_values, p_ip_address, p_user_agent
+  ) returning id into log_id;
+  
+  return log_id;
+end;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
 
 -- ----------------------------
 -- Function structure for pgp_armor_headers
@@ -1000,8 +1074,8 @@ CREATE FUNCTION "public"."pgp_key_id"(bytea)
 -- ----------------------------
 -- Function structure for pgp_pub_decrypt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_pub_decrypt"(bytea, bytea, text);
-CREATE FUNCTION "public"."pgp_pub_decrypt"(bytea, bytea, text)
+DROP FUNCTION IF EXISTS "public"."pgp_pub_decrypt"(bytea, bytea);
+CREATE FUNCTION "public"."pgp_pub_decrypt"(bytea, bytea)
   RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pgp_pub_decrypt_text'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
@@ -1018,9 +1092,18 @@ CREATE FUNCTION "public"."pgp_pub_decrypt"(bytea, bytea, text, text)
 -- ----------------------------
 -- Function structure for pgp_pub_decrypt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_pub_decrypt"(bytea, bytea);
-CREATE FUNCTION "public"."pgp_pub_decrypt"(bytea, bytea)
+DROP FUNCTION IF EXISTS "public"."pgp_pub_decrypt"(bytea, bytea, text);
+CREATE FUNCTION "public"."pgp_pub_decrypt"(bytea, bytea, text)
   RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pgp_pub_decrypt_text'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for pgp_pub_decrypt_bytea
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."pgp_pub_decrypt_bytea"(bytea, bytea);
+CREATE FUNCTION "public"."pgp_pub_decrypt_bytea"(bytea, bytea)
+  RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_pub_decrypt_bytea'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -1043,19 +1126,10 @@ CREATE FUNCTION "public"."pgp_pub_decrypt_bytea"(bytea, bytea, text, text)
   COST 1;
 
 -- ----------------------------
--- Function structure for pgp_pub_decrypt_bytea
--- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_pub_decrypt_bytea"(bytea, bytea);
-CREATE FUNCTION "public"."pgp_pub_decrypt_bytea"(bytea, bytea)
-  RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_pub_decrypt_bytea'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
-
--- ----------------------------
 -- Function structure for pgp_pub_encrypt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_pub_encrypt"(text, bytea, text);
-CREATE FUNCTION "public"."pgp_pub_encrypt"(text, bytea, text)
+DROP FUNCTION IF EXISTS "public"."pgp_pub_encrypt"(text, bytea);
+CREATE FUNCTION "public"."pgp_pub_encrypt"(text, bytea)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_pub_encrypt_text'
   LANGUAGE c VOLATILE STRICT
   COST 1;
@@ -1063,8 +1137,8 @@ CREATE FUNCTION "public"."pgp_pub_encrypt"(text, bytea, text)
 -- ----------------------------
 -- Function structure for pgp_pub_encrypt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_pub_encrypt"(text, bytea);
-CREATE FUNCTION "public"."pgp_pub_encrypt"(text, bytea)
+DROP FUNCTION IF EXISTS "public"."pgp_pub_encrypt"(text, bytea, text);
+CREATE FUNCTION "public"."pgp_pub_encrypt"(text, bytea, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_pub_encrypt_text'
   LANGUAGE c VOLATILE STRICT
   COST 1;
@@ -1090,15 +1164,6 @@ CREATE FUNCTION "public"."pgp_pub_encrypt_bytea"(bytea, bytea, text)
 -- ----------------------------
 -- Function structure for pgp_sym_decrypt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_sym_decrypt"(bytea, text);
-CREATE FUNCTION "public"."pgp_sym_decrypt"(bytea, text)
-  RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pgp_sym_decrypt_text'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
-
--- ----------------------------
--- Function structure for pgp_sym_decrypt
--- ----------------------------
 DROP FUNCTION IF EXISTS "public"."pgp_sym_decrypt"(bytea, text, text);
 CREATE FUNCTION "public"."pgp_sym_decrypt"(bytea, text, text)
   RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pgp_sym_decrypt_text'
@@ -1106,11 +1171,11 @@ CREATE FUNCTION "public"."pgp_sym_decrypt"(bytea, text, text)
   COST 1;
 
 -- ----------------------------
--- Function structure for pgp_sym_decrypt_bytea
+-- Function structure for pgp_sym_decrypt
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_sym_decrypt_bytea"(bytea, text);
-CREATE FUNCTION "public"."pgp_sym_decrypt_bytea"(bytea, text)
-  RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_sym_decrypt_bytea'
+DROP FUNCTION IF EXISTS "public"."pgp_sym_decrypt"(bytea, text);
+CREATE FUNCTION "public"."pgp_sym_decrypt"(bytea, text)
+  RETURNS "pg_catalog"."text" AS '$libdir/pgcrypto', 'pgp_sym_decrypt_text'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
 
@@ -1119,6 +1184,15 @@ CREATE FUNCTION "public"."pgp_sym_decrypt_bytea"(bytea, text)
 -- ----------------------------
 DROP FUNCTION IF EXISTS "public"."pgp_sym_decrypt_bytea"(bytea, text, text);
 CREATE FUNCTION "public"."pgp_sym_decrypt_bytea"(bytea, text, text)
+  RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_sym_decrypt_bytea'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for pgp_sym_decrypt_bytea
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."pgp_sym_decrypt_bytea"(bytea, text);
+CREATE FUNCTION "public"."pgp_sym_decrypt_bytea"(bytea, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_sym_decrypt_bytea'
   LANGUAGE c IMMUTABLE STRICT
   COST 1;
@@ -1144,8 +1218,8 @@ CREATE FUNCTION "public"."pgp_sym_encrypt"(text, text)
 -- ----------------------------
 -- Function structure for pgp_sym_encrypt_bytea
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_sym_encrypt_bytea"(bytea, text);
-CREATE FUNCTION "public"."pgp_sym_encrypt_bytea"(bytea, text)
+DROP FUNCTION IF EXISTS "public"."pgp_sym_encrypt_bytea"(bytea, text, text);
+CREATE FUNCTION "public"."pgp_sym_encrypt_bytea"(bytea, text, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_sym_encrypt_bytea'
   LANGUAGE c VOLATILE STRICT
   COST 1;
@@ -1153,8 +1227,8 @@ CREATE FUNCTION "public"."pgp_sym_encrypt_bytea"(bytea, text)
 -- ----------------------------
 -- Function structure for pgp_sym_encrypt_bytea
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."pgp_sym_encrypt_bytea"(bytea, text, text);
-CREATE FUNCTION "public"."pgp_sym_encrypt_bytea"(bytea, text, text)
+DROP FUNCTION IF EXISTS "public"."pgp_sym_encrypt_bytea"(bytea, text);
+CREATE FUNCTION "public"."pgp_sym_encrypt_bytea"(bytea, text)
   RETURNS "pg_catalog"."bytea" AS '$libdir/pgcrypto', 'pgp_sym_encrypt_bytea'
   LANGUAGE c VOLATILE STRICT
   COST 1;
@@ -1315,6 +1389,15 @@ CREATE FUNCTION "public"."sparsevec_typmod_in"(_cstring)
 -- ----------------------------
 -- Function structure for subvector
 -- ----------------------------
+DROP FUNCTION IF EXISTS "public"."subvector"("public"."vector", int4, int4);
+CREATE FUNCTION "public"."subvector"("public"."vector", int4, int4)
+  RETURNS "public"."vector" AS '$libdir/vector', 'subvector'
+  LANGUAGE c IMMUTABLE STRICT
+  COST 1;
+
+-- ----------------------------
+-- Function structure for subvector
+-- ----------------------------
 DROP FUNCTION IF EXISTS "public"."subvector"("public"."halfvec", int4, int4);
 CREATE FUNCTION "public"."subvector"("public"."halfvec", int4, int4)
   RETURNS "public"."halfvec" AS '$libdir/vector', 'halfvec_subvector'
@@ -1322,13 +1405,75 @@ CREATE FUNCTION "public"."subvector"("public"."halfvec", int4, int4)
   COST 1;
 
 -- ----------------------------
--- Function structure for subvector
+-- Function structure for update_updated_at_column
 -- ----------------------------
-DROP FUNCTION IF EXISTS "public"."subvector"("public"."vector", int4, int4);
-CREATE FUNCTION "public"."subvector"("public"."vector", int4, int4)
-  RETURNS "public"."vector" AS '$libdir/vector', 'subvector'
-  LANGUAGE c IMMUTABLE STRICT
-  COST 1;
+DROP FUNCTION IF EXISTS "public"."update_updated_at_column"();
+CREATE FUNCTION "public"."update_updated_at_column"()
+  RETURNS "pg_catalog"."trigger" AS $BODY$
+begin
+  NEW.updated_at = now();
+  return NEW;
+end;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+-- ----------------------------
+-- Function structure for user_has_permission
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."user_has_permission"("user_role" text, "permission_name" text);
+CREATE FUNCTION "public"."user_has_permission"("user_role" text, "permission_name" text)
+  RETURNS "pg_catalog"."bool" AS $BODY$
+begin
+  return exists (
+    select 1 
+    from role_permissions rp
+    join permissions p on rp.permission_id = p.id
+    where rp.role = user_role 
+      and p.name = permission_name 
+      and rp.granted = true
+  );
+end;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+-- ----------------------------
+-- Function structure for users_audit_trigger
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."users_audit_trigger"();
+CREATE FUNCTION "public"."users_audit_trigger"()
+  RETURNS "pg_catalog"."trigger" AS $BODY$
+begin
+  if TG_OP = 'UPDATE' then
+    perform log_user_action(
+      NEW.id,
+      'update',
+      'users',
+      NEW.id,
+      to_jsonb(OLD),
+      to_jsonb(NEW)
+    );
+  elsif TG_OP = 'DELETE' then
+    perform log_user_action(
+      OLD.id,
+      'delete',
+      'users',
+      OLD.id,
+      to_jsonb(OLD),
+      null
+    );
+  end if;
+  
+  if TG_OP = 'DELETE' then
+    return OLD;
+  else
+    return NEW;
+  end if;
+end;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
 
 -- ----------------------------
 -- Function structure for vector
@@ -1606,6 +1751,21 @@ OWNED BY "public"."well_daily"."id";
 SELECT setval('"public"."well_daily_id_seq"', 1, false);
 
 -- ----------------------------
+-- Indexes structure for table audit_logs
+-- ----------------------------
+CREATE INDEX "idx_audit_logs_created_at" ON "public"."audit_logs" USING btree (
+  "created_at" "pg_catalog"."timestamptz_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_audit_logs_user_id" ON "public"."audit_logs" USING btree (
+  "user_id" "pg_catalog"."uuid_ops" ASC NULLS LAST
+);
+
+-- ----------------------------
+-- Primary Key structure for table audit_logs
+-- ----------------------------
+ALTER TABLE "public"."audit_logs" ADD CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id");
+
+-- ----------------------------
 -- Indexes structure for table doc_chunks
 -- ----------------------------
 CREATE INDEX "idx_doc_chunks_embedding" ON "public"."doc_chunks" (
@@ -1664,9 +1824,42 @@ ALTER TABLE "public"."geo_blocks" ADD CONSTRAINT "geo_blocks_pkey" PRIMARY KEY (
 ALTER TABLE "public"."geo_wells" ADD CONSTRAINT "geo_wells_pkey" PRIMARY KEY ("name");
 
 -- ----------------------------
+-- Uniques structure for table permissions
+-- ----------------------------
+ALTER TABLE "public"."permissions" ADD CONSTRAINT "permissions_name_key" UNIQUE ("name");
+
+-- ----------------------------
+-- Primary Key structure for table permissions
+-- ----------------------------
+ALTER TABLE "public"."permissions" ADD CONSTRAINT "permissions_pkey" PRIMARY KEY ("id");
+
+-- ----------------------------
 -- Primary Key structure for table production_timeseries
 -- ----------------------------
 ALTER TABLE "public"."production_timeseries" ADD CONSTRAINT "production_timeseries_pkey" PRIMARY KEY ("id");
+
+-- ----------------------------
+-- Uniques structure for table role_permissions
+-- ----------------------------
+ALTER TABLE "public"."role_permissions" ADD CONSTRAINT "role_permissions_role_permission_id_key" UNIQUE ("role", "permission_id");
+
+-- ----------------------------
+-- Primary Key structure for table role_permissions
+-- ----------------------------
+ALTER TABLE "public"."role_permissions" ADD CONSTRAINT "role_permissions_pkey" PRIMARY KEY ("id");
+
+-- ----------------------------
+-- Indexes structure for table sessions
+-- ----------------------------
+CREATE INDEX "idx_sessions_expires_at" ON "public"."sessions" USING btree (
+  "expires_at" "pg_catalog"."timestamptz_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_sessions_token" ON "public"."sessions" USING btree (
+  "token" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_sessions_user_id" ON "public"."sessions" USING btree (
+  "user_id" "pg_catalog"."uuid_ops" ASC NULLS LAST
+);
 
 -- ----------------------------
 -- Uniques structure for table sessions
@@ -1679,9 +1872,37 @@ ALTER TABLE "public"."sessions" ADD CONSTRAINT "sessions_token_key" UNIQUE ("tok
 ALTER TABLE "public"."sessions" ADD CONSTRAINT "sessions_pkey" PRIMARY KEY ("id");
 
 -- ----------------------------
+-- Indexes structure for table users
+-- ----------------------------
+CREATE INDEX "idx_users_email" ON "public"."users" USING btree (
+  "email" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_users_is_active" ON "public"."users" USING btree (
+  "is_active" "pg_catalog"."bool_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_users_role" ON "public"."users" USING btree (
+  "role" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
+);
+
+-- ----------------------------
+-- Triggers structure for table users
+-- ----------------------------
+CREATE TRIGGER "update_users_updated_at" BEFORE UPDATE ON "public"."users"
+FOR EACH ROW
+EXECUTE PROCEDURE "public"."update_updated_at_column"();
+CREATE TRIGGER "users_audit_trigger" AFTER UPDATE OR DELETE ON "public"."users"
+FOR EACH ROW
+EXECUTE PROCEDURE "public"."users_audit_trigger"();
+
+-- ----------------------------
 -- Uniques structure for table users
 -- ----------------------------
 ALTER TABLE "public"."users" ADD CONSTRAINT "users_email_key" UNIQUE ("email");
+
+-- ----------------------------
+-- Checks structure for table users
+-- ----------------------------
+ALTER TABLE "public"."users" ADD CONSTRAINT "users_role_check" CHECK (role = ANY (ARRAY['superadmin'::text, 'admin'::text, 'user'::text]));
 
 -- ----------------------------
 -- Primary Key structure for table users
@@ -1707,6 +1928,11 @@ CREATE INDEX "idx_well_daily_well" ON "public"."well_daily" USING btree (
 ALTER TABLE "public"."well_daily" ADD CONSTRAINT "well_daily_pkey" PRIMARY KEY ("id");
 
 -- ----------------------------
+-- Foreign Keys structure for table audit_logs
+-- ----------------------------
+ALTER TABLE "public"."audit_logs" ADD CONSTRAINT "audit_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+-- ----------------------------
 -- Foreign Keys structure for table doc_chunks
 -- ----------------------------
 ALTER TABLE "public"."doc_chunks" ADD CONSTRAINT "doc_chunks_file_id_fkey" FOREIGN KEY ("file_id") REFERENCES "public"."files" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
@@ -1729,6 +1955,16 @@ ALTER TABLE "public"."folders" ADD CONSTRAINT "folders_owner_id_fkey" FOREIGN KE
 ALTER TABLE "public"."folders" ADD CONSTRAINT "folders_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "public"."folders" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- ----------------------------
+-- Foreign Keys structure for table role_permissions
+-- ----------------------------
+ALTER TABLE "public"."role_permissions" ADD CONSTRAINT "role_permissions_permission_id_fkey" FOREIGN KEY ("permission_id") REFERENCES "public"."permissions" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- ----------------------------
 -- Foreign Keys structure for table sessions
 -- ----------------------------
 ALTER TABLE "public"."sessions" ADD CONSTRAINT "sessions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+-- ----------------------------
+-- Foreign Keys structure for table users
+-- ----------------------------
+ALTER TABLE "public"."users" ADD CONSTRAINT "users_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."users" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
